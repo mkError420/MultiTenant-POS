@@ -752,14 +752,47 @@ export default function Checkout() {
                 />
               </div>
 
-              <div>
+              <div className="relative">
                 <input
                   type="text"
                   placeholder="Phone Number"
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={(e) => {
+                    setCustomerPhone(e.target.value);
+                    if (selectedCustomerId !== '') {
+                      setSelectedCustomerId('');
+                    }
+                  }}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2 px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
+
+                {/* Autocomplete Customer Suggestions */}
+                {selectedCustomerId === '' && customerPhone.trim() !== '' && (() => {
+                  const query = customerPhone.replace(/[^0-9]/g, '');
+                  const suggestions = customers.filter(c => 
+                    c.phone && c.phone.replace(/[^0-9]/g, '').includes(query)
+                  );
+                  if (suggestions.length === 0) return null;
+                  return (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto divide-y divide-slate-100">
+                      {suggestions.map(c => (
+                        <div
+                          key={c.id}
+                          onClick={() => {
+                            setSelectedCustomerId(c.id);
+                          }}
+                          className="p-2 px-3 hover:bg-indigo-50 cursor-pointer text-left transition-colors"
+                        >
+                          <div className="text-xs font-semibold text-slate-800">{c.name}</div>
+                          <div className="text-[10px] text-slate-500 flex justify-between mt-0.5">
+                            <span>Phone: {c.phone}</span>
+                            {c.address && <span className="truncate max-w-[120px]">Loc: {c.address}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
