@@ -16,7 +16,7 @@ export default function Checkout() {
   const [customerAddress, setCustomerAddress] = useState('');
   const [syncToDirectory, setSyncToDirectory] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
-  const [discount, setDiscount] = useState(0);
+  const [discountPercent, setDiscountPercent] = useState(0);
   const [taxRate, setTaxRate] = useState(0.10); // Dynamic Tax Rate (default 10%)
   const [paymentMethod, setPaymentMethod] = useState('cash');
   
@@ -208,7 +208,8 @@ export default function Checkout() {
   // Financial Calculators
   const getSubtotal = () => cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const getTax = () => getSubtotal() * taxRate;
-  const getFinalTotal = () => (getSubtotal() - parseFloat(discount || 0)) + getTax();
+  const getDiscountAmount = () => getSubtotal() * (parseFloat(discountPercent || 0) / 100);
+  const getFinalTotal = () => (getSubtotal() - getDiscountAmount()) + getTax();
 
   // --- SUBMIT CHECKOUT ---
   const handleCheckout = async () => {
@@ -276,7 +277,7 @@ export default function Checkout() {
       // Structure POST payload matching backend schema requirements
       const payload = {
         customer_id: finalCustomerId,
-        discount: parseFloat(discount || 0),
+        discount: getDiscountAmount(),
         tax: getTax(),
         payment_method: paymentMethod,
         items: cart.map(item => ({
@@ -327,7 +328,7 @@ export default function Checkout() {
 
       // Flush States
       setCart([]);
-      setDiscount(0);
+      setDiscountPercent(0);
       setSelectedCustomerId('');
       setCustomerName('');
       setCustomerPhone('');
@@ -527,7 +528,7 @@ export default function Checkout() {
               </div>
               {receipt.discount > 0 && (
                 <div className="flex justify-between text-rose-500">
-                  <span>Discount:</span>
+                  <span>Discount ({((receipt.discount / receipt.subtotal) * 100).toFixed(1).replace(/\.0$/, '')}%):</span>
                   <span>-৳{receipt.discount.toFixed(2)}</span>
                 </div>
               )}
@@ -622,7 +623,7 @@ export default function Checkout() {
               </div>
               {receipt.discount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Discount:</span>
+                  <span>Discount ({((receipt.discount / receipt.subtotal) * 100).toFixed(1).replace(/\.0$/, '')}%):</span>
                   <span>-৳{receipt.discount.toFixed(2)}</span>
                 </div>
               )}
@@ -703,7 +704,7 @@ export default function Checkout() {
                 </div>
                 {receipt.discount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#ef4444' }}>
-                    <span>Discount</span>
+                    <span>Discount ({((receipt.discount / receipt.subtotal) * 100).toFixed(1).replace(/\.0$/, '')}%)</span>
                     <span>-৳{receipt.discount.toFixed(2)}</span>
                   </div>
                 )}
@@ -917,16 +918,23 @@ export default function Checkout() {
             
             {/* Discount Manual Inputs */}
             <div className="flex justify-between items-center">
-              <span>Discount (৳)</span>
+              <span>Discount (%)</span>
               <input
                 type="number"
                 min="0"
-                max={getSubtotal()}
-                value={discount}
-                onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                max="100"
+                step="0.1"
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
                 className="w-20 border border-slate-200 rounded px-1.5 py-0.5 text-right font-medium text-slate-700 bg-white"
               />
             </div>
+            {getDiscountAmount() > 0 && (
+              <div className="flex justify-between text-xs text-rose-500">
+                <span>Discounted Amount</span>
+                <span>-৳{getDiscountAmount().toFixed(2)}</span>
+              </div>
+            )}
 
             <div className="flex justify-between">
               <span>Tax ({(taxRate * 100).toString()}%)</span>

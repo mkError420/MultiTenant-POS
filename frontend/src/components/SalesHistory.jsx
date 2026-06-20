@@ -224,7 +224,9 @@ export default function SalesHistory() {
                   </div>
                   {parseFloat(saleDetails.discount) > 0 && (
                     <div className="flex justify-between text-rose-500">
-                      <span>Discount deduction:</span>
+                      <span>
+                        Discount ({((parseFloat(saleDetails.discount) / parseFloat(saleDetails.total_amount)) * 100).toFixed(1).replace(/\.0$/, '')}%):
+                      </span>
                       <span>-৳{parseFloat(saleDetails.discount).toFixed(2)}</span>
                     </div>
                   )}
