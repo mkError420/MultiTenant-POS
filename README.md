@@ -1,10 +1,10 @@
-# 🏪 Multi-Tenant Point of Sale System
+#  Multi-Tenant Point of Sale System
 
 A full-stack, web-based **Multi-Tenant POS System** built with React + Node.js + MySQL. Each tenant shop operates in complete isolation — managed centrally by a Super Admin.
 
 ---
 
-## 🚀 Tech Stack
+##  Tech Stack
 
 | Layer | Technology |
 |-------|------------|
@@ -15,7 +15,7 @@ A full-stack, web-based **Multi-Tenant POS System** built with React + Node.js +
 
 ---
 
-## 👥 Roles
+##  Roles
 
 | Role | Description |
 |------|-------------|
@@ -25,7 +25,7 @@ A full-stack, web-based **Multi-Tenant POS System** built with React + Node.js +
 
 ---
 
-## ✅ Features
+##  Features
 
 ### Super Admin
 - Register new tenant shops (with shop admin account)
@@ -50,7 +50,7 @@ A full-stack, web-based **Multi-Tenant POS System** built with React + Node.js +
 
 ---
 
-## 🗂️ Project Structure
+##  Project Structure
 
 ```
 MK/
@@ -92,7 +92,7 @@ MK/
 
 ---
 
-## ⚙️ Setup & Installation
+##  Setup & Installation
 
 ### 1. Clone the repo
 ```bash
@@ -144,7 +144,7 @@ npm run dev
 
 ---
 
-## 🔑 Demo Credentials
+##  Demo Credentials
 
 | Role | Email | Password |
 |------|-------|----------|
@@ -157,6 +157,6 @@ npm run dev
 
 ---
 
-## 📄 License
+##  License
 
 MIT — free to use and modify.
