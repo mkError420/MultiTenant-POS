@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS `customers` (
   `email` VARCHAR(100) NULL,
   `phone` VARCHAR(20) NULL,
   `address` TEXT NULL,
+  `due_balance` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -123,6 +124,8 @@ CREATE TABLE IF NOT EXISTS `sales` (
   `discount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   `tax` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   `final_amount` DECIMAL(10,2) NOT NULL,
+  `paid_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `due_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   `payment_method` ENUM('cash', 'card', 'mobile_pay', 'other') NOT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -173,6 +176,30 @@ CREATE TABLE IF NOT EXISTS `sale_items` (
     REFERENCES `products` (`id`)
     ON DELETE RESTRICT
     ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------
+-- Table `held_bills`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `held_bills` (
+  `id` INT AUTO_INCREMENT,
+  `shop_id` INT NOT NULL,
+  `user_id` INT NOT NULL,
+  `customer_id` INT NULL,
+  `customer_name` VARCHAR(100) NULL,
+  `customer_phone` VARCHAR(20) NULL,
+  `customer_address` TEXT NULL,
+  `discount_percent` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  `notes` VARCHAR(255) NULL,
+  `items` JSON NOT NULL,
+  `due_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `status` ENUM('held', 'completed', 'cancelled') NOT NULL DEFAULT 'held',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_held_bills_shop` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_held_bills_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_held_bills_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------

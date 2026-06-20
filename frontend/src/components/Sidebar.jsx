@@ -17,7 +17,8 @@ export default function Sidebar({
   isCollapsed,
   setIsCollapsed,
   currentPath = '/dashboard',
-  onNavigate
+  onNavigate,
+  heldBillsCount = 0
 }) {
   
   const getNavItems = () => {
@@ -33,6 +34,7 @@ export default function Sidebar({
         return [
           { label: 'Shop Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
           { label: 'POS Checkout', path: '/checkout', icon: <POSIcon /> },
+          { label: 'Held Bills', path: '/held-bills', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, badge: heldBillsCount },
           { label: 'Inventory (Products)', path: '/products', icon: <InventoryIcon /> },
           { label: 'Suppliers', path: '/suppliers', icon: <SuppliersIcon /> },
           { label: 'Customers', path: '/customers', icon: <UsersIcon /> },
@@ -43,6 +45,7 @@ export default function Sidebar({
       case 'shop_staff':
         return [
           { label: 'POS Checkout', path: '/checkout', icon: <POSIcon /> },
+          { label: 'Held Bills', path: '/held-bills', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, badge: heldBillsCount },
           { label: 'Inventory check', path: '/products', icon: <InventoryIcon /> },
           { label: 'Customers', path: '/customers', icon: <UsersIcon /> },
           { label: 'My Sales Log', path: '/sales', icon: <ReportsIcon /> },
@@ -75,7 +78,7 @@ export default function Sidebar({
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800">
           <div className="flex items-center space-x-3 overflow-hidden">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-600 font-bold text-white shrink-0">
-              POS
+               POS
             </div>
             {!isCollapsed && (
               <span className="text-lg font-bold tracking-wider bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent truncate">
@@ -116,6 +119,11 @@ export default function Sidebar({
                   {item.icon}
                 </div>
                 {!isCollapsed && <span className="ml-3 truncate">{item.label}</span>}
+                {item.badge !== undefined && item.badge > 0 && !isCollapsed && (
+                  <span className="ml-auto bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}

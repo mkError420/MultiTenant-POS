@@ -11,6 +11,7 @@ import ManageStaff from './components/ManageStaff';
 import Settings from './components/Settings';
 import ManageShops from './components/ManageShops';
 import SystemUsers from './components/SystemUsers';
+import HeldBills from './components/HeldBills';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -35,6 +36,8 @@ export default function App() {
   const [loading, setLoading] = useState(true); // checking stored token on startup
   const [currentPath, setCurrentPath] = useState('/checkout');
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [heldBillsCount, setHeldBillsCount] = useState(0);
+  const [resumedHeldBill, setResumedHeldBill] = useState(null);
 
   // On mount: verify existing token against the backend
   useEffect(() => {
@@ -112,6 +115,15 @@ export default function App() {
           if (stockResponse.ok) {
             setLowStockAlerts(await stockResponse.json());
           }
+
+          // Fetch held bills count
+          const heldResponse = await fetch(`${API_BASE_URL}/held-bills`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (heldResponse.ok) {
+            const heldData = await heldResponse.json();
+            setHeldBillsCount(heldData.filter(bill => bill.status === 'held').length);
+          }
         }
       } catch (e) {
         console.error('Session detail load failed:', e);
@@ -150,14 +162,15 @@ export default function App() {
 
     switch (currentPath) {
       case '/dashboard': return <Dashboard />;
-      case '/checkout':  return <Checkout />;
+      case '/checkout':  return <Checkout resumedHeldBill={resumedHeldBill} onClearResumedHeldBill={() => setResumedHeldBill(null)} onHeldBillsChange={(count) => setHeldBillsCount(count)} />;
+      case '/held-bills': return <HeldBills onResume={(bill) => { setResumedHeldBill(bill); setCurrentPath('/checkout'); }} onHeldBillsChange={(count) => setHeldBillsCount(count)} />;
       case '/products':  return <Inventory />;
       case '/suppliers': return <Suppliers />;
       case '/customers': return <Customers />;
       case '/sales':     return <SalesHistory />;
       case '/staff':     return <ManageStaff />;
       case '/settings':  return <Settings />;
-      default:           return <Checkout />;
+      default:           return <Checkout resumedHeldBill={resumedHeldBill} onClearResumedHeldBill={() => setResumedHeldBill(null)} onHeldBillsChange={(count) => setHeldBillsCount(count)} />;
     }
   };
 
@@ -185,6 +198,7 @@ export default function App() {
     <DashboardLayout
       user={user}
       lowStockItems={lowStockAlerts}
+      heldBillsCount={heldBillsCount}
       currentPath={currentPath}
       onNavigate={(path) => setCurrentPath(path)}
       onLogout={handleLogout}

@@ -215,13 +215,14 @@ export default function Customers() {
                 <th className="p-4">Phone Number</th>
                 <th className="p-4">Email</th>
                 <th className="p-4">Address</th>
+                <th className="p-4">Due Balance</th>
                 <th className="p-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="p-12 text-center">
+                  <td colSpan="6" className="p-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
                     </div>
@@ -229,7 +230,7 @@ export default function Customers() {
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-12 text-center text-slate-400">
+                  <td colSpan="6" className="p-12 text-center text-slate-400">
                     No customers found. Add a customer profile to start.
                   </td>
                 </tr>
@@ -240,6 +241,15 @@ export default function Customers() {
                     <td className="p-4 text-slate-600">{customer.phone || '-'}</td>
                     <td className="p-4 text-slate-600">{customer.email || '-'}</td>
                     <td className="p-4 text-slate-600 max-w-[200px] truncate" title={customer.address}>{customer.address || '-'}</td>
+                    <td className="p-4">
+                      {parseFloat(customer.due_balance || 0) > 0 ? (
+                        <span className="bg-rose-50 text-rose-700 text-xs font-bold px-2.5 py-1 rounded-lg border border-rose-100">
+                          ৳{parseFloat(customer.due_balance).toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs font-medium">৳0.00</span>
+                      )}
+                    </td>
                     <td className="p-4 text-center space-x-2 whitespace-nowrap">
                       <button
                         onClick={() => openHistory(customer)}
@@ -437,7 +447,14 @@ export default function Customers() {
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-lg font-bold text-slate-800">Purchase History</h3>
-                <p className="text-xs text-slate-500">Customer Profile: <span className="font-semibold text-indigo-600">{historyCustomer?.name}</span></p>
+                <div className="flex items-center space-x-2 mt-1">
+                  <p className="text-xs text-slate-500">Customer Profile: <span className="font-semibold text-indigo-600">{historyCustomer?.name}</span></p>
+                  {parseFloat(historyCustomer?.due_balance || 0) > 0 && (
+                    <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-rose-100">
+                      Due Balance: ৳{parseFloat(historyCustomer.due_balance).toFixed(2)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center space-x-2">
                 {!historyLoading && historySales.length > 0 && (
@@ -529,10 +546,20 @@ export default function Customers() {
                           <span>Tax:</span>
                           <span>৳{parseFloat(sale.tax).toFixed(2)}</span>
                         </div>
+                        <div className="flex justify-between text-slate-500">
+                          <span>Final Total:</span>
+                          <span>৳{parseFloat(sale.final_amount).toFixed(2)}</span>
+                        </div>
                         <div className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1 text-sm">
                           <span>Total Paid:</span>
-                          <span className="text-indigo-600">৳{parseFloat(sale.final_amount).toFixed(2)}</span>
+                          <span className="text-indigo-600">৳{parseFloat(sale.paid_amount !== undefined ? sale.paid_amount : sale.final_amount).toFixed(2)}</span>
                         </div>
+                        {parseFloat(sale.due_amount || 0) > 0 && (
+                          <div className="flex justify-between font-semibold text-rose-600 text-xs">
+                            <span>Due Balance:</span>
+                            <span>৳{parseFloat(sale.due_amount).toFixed(2)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -578,6 +605,7 @@ export default function Customers() {
               <div><strong>Phone Number:</strong> {historyCustomer.phone || '-'}</div>
               <div><strong>Email:</strong> {historyCustomer.email || '-'}</div>
               <div><strong>Address:</strong> {historyCustomer.address || '-'}</div>
+              <div><strong>Outstanding Due Balance:</strong> ৳{parseFloat(historyCustomer.due_balance || 0).toFixed(2)}</div>
             </div>
           </div>
 
@@ -634,10 +662,20 @@ export default function Customers() {
                         <span>Tax:</span>
                         <span>৳{parseFloat(sale.tax).toFixed(2)}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', color: '#1e293b', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '2px' }}>
-                        <span>Total:</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                        <span>Final Total:</span>
                         <span>৳{parseFloat(sale.final_amount).toFixed(2)}</span>
                       </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', color: '#1e293b', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '2px' }}>
+                        <span>Total Paid:</span>
+                        <span>৳{parseFloat(sale.paid_amount !== undefined ? sale.paid_amount : sale.final_amount).toFixed(2)}</span>
+                      </div>
+                      {parseFloat(sale.due_amount || 0) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold', color: '#ef4444' }}>
+                          <span>Due Balance:</span>
+                          <span>৳{parseFloat(sale.due_amount).toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

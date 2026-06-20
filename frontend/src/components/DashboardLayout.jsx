@@ -7,7 +7,8 @@ export default function DashboardLayout({
   lowStockItems = [],
   currentPath = '/dashboard',
   onNavigate,
-  onLogout = () => console.log('Logged out')
+  onLogout = () => console.log('Logged out'),
+  heldBillsCount = 0
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -40,6 +41,7 @@ export default function DashboardLayout({
         setIsCollapsed={setIsCollapsed}
         currentPath={currentPath}
         onNavigate={onNavigate}
+        heldBillsCount={heldBillsCount}
       />
 
       {/* 2. Main Page Framework */}

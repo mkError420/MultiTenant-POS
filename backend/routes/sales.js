@@ -15,9 +15,10 @@ router.use(enforceTenant);
 router.post('/', authorize(['shop_admin', 'shop_staff']), async (req, res) => {
   const shopId = req.shopId;
   const userId = req.user.id;
-  const { customer_id, items, discount = 0, tax = 0, payment_method } = req.body;
+  const { customer_id, items = [], discount = 0, tax = 0, payment_method, reduce_due_amount = 0 } = req.body;
+  const parsedReduceDue = parseFloat(reduce_due_amount || 0);
 
-  if (!items || !Array.isArray(items) || items.length === 0) {
+  if ((!items || !Array.isArray(items) || items.length === 0) && parsedReduceDue <= 0) {
     return res.status(400).json({ error: 'Checkout cart is empty.' });
   }
 
@@ -91,16 +92,69 @@ router.post('/', authorize(['shop_admin', 'shop_staff']), async (req, res) => {
     }
 
     // 3. Compute financial amounts
-    const finalAmount = (calculatedTotal - parseFloat(discount)) + parseFloat(tax);
+    const finalAmount = (calculatedTotal - parseFloat(discount)) + parseFloat(tax) + parsedReduceDue;
 
-    // 4. Save transaction metadata in sales table
+    // Parse paid amount and compute due amount
+    const paidAmount = req.body.paid_amount !== undefined ? parseFloat(req.body.paid_amount) : finalAmount;
+    const dueAmount = finalAmount - paidAmount;
+
+    if (dueAmount > 0 && !customer_id) {
+      throw new Error('Customer profile selection is required to record outstanding due balance.');
+    }
+
+    // 4. Save transaction metadata in sales table (with paid and due amounts)
     const [salesResult] = await connection.query(
-      `INSERT INTO sales (shop_id, customer_id, user_id, total_amount, discount, tax, final_amount, payment_method) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [shopId, customer_id || null, userId, calculatedTotal, discount, tax, finalAmount, payment_method]
+      `INSERT INTO sales (shop_id, customer_id, user_id, total_amount, discount, tax, final_amount, paid_amount, due_amount, payment_method) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [shopId, customer_id || null, userId, calculatedTotal, discount, tax, finalAmount, paidAmount, dueAmount, payment_method]
     );
 
     const saleId = salesResult.insertId;
+
+    // If a due payment is collected, decrement customer due_balance
+    if (parsedReduceDue > 0 && customer_id) {
+      await connection.query(
+        'UPDATE customers SET due_balance = due_balance - ? WHERE id = ? AND shop_id = ?',
+        [parsedReduceDue, customer_id, shopId]
+      );
+    }
+
+    // If there is a due balance, update customer record and add an automated HeldBills entry
+    if (dueAmount > 0) {
+      // Increment customer due_balance
+      await connection.query(
+        'UPDATE customers SET due_balance = due_balance + ? WHERE id = ? AND shop_id = ?',
+        [dueAmount, customer_id, shopId]
+      );
+
+      // Fetch customer details to copy to held bills
+      const [customerRows] = await connection.query(
+        'SELECT name, phone, address FROM customers WHERE id = ? AND shop_id = ?',
+        [customer_id, shopId]
+      );
+      
+      if (customerRows.length > 0) {
+        const cust = customerRows[0];
+        const note = `Due from Sale #${saleId}`;
+        await connection.query(
+          `INSERT INTO held_bills (shop_id, user_id, customer_id, customer_name, customer_phone, customer_address, discount_percent, notes, items, due_amount, status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            shopId,
+            userId,
+            customer_id,
+            cust.name,
+            cust.phone || null,
+            cust.address || null,
+            0.00,
+            note,
+            '[]', // empty items JSON array since it is a due payment tracker
+            dueAmount,
+            'held'
+          ]
+        );
+      }
+    }
 
     // 5. Save line items in sale_items table
     const saleItemInsertQueries = validatedItems.map(item => {

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 // Simulated base URL for API requests
 const API_BASE_URL = 'http://localhost:5000/api';
 
-export default function Checkout() {
+export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill = null, onClearResumedHeldBill = () => {} }) {
   // --- STATE MANAGEMENT ---
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -19,6 +19,9 @@ export default function Checkout() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [taxRate, setTaxRate] = useState(0.10); // Dynamic Tax Rate (default 10%)
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paidAmount, setPaidAmount] = useState('');
+  const [isPaidTouched, setIsPaidTouched] = useState(false);
+  const [reduceDueAmount, setReduceDueAmount] = useState(0);
   
   // UI States
   const [loading, setLoading] = useState(false);
@@ -26,6 +29,13 @@ export default function Checkout() {
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [alert, setAlert] = useState(null); // { type: 'success' | 'error', message }
   const [receipt, setReceipt] = useState(null); // Receipts detail storage after checkout
+
+  // Held Bills States
+  const [heldBills, setHeldBills] = useState([]);
+  const [showHeldBillsModal, setShowHeldBillsModal] = useState(false);
+  const [showHoldBillModal, setShowHoldBillModal] = useState(false);
+  const [holdNotes, setHoldNotes] = useState('');
+  const [holdingBill, setHoldingBill] = useState(false);
 
   // Decode/parse current user details on start
   useEffect(() => {
@@ -126,11 +136,29 @@ export default function Checkout() {
     }
   };
 
+  // 4. Fetch held bills from the backend
+  const fetchHeldBills = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/held-bills`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setHeldBills(data);
+        onHeldBillsChange(data.length);
+      }
+    } catch (e) {
+      console.error('Failed to fetch held bills', e);
+    }
+  };
+
   // Fetch initial product list & customer directory
   useEffect(() => {
     fetchProducts();
     fetchCustomers();
     fetchShopSettings();
+    fetchHeldBills();
   }, []);
 
   // Debounced/delayed search triggers on input change
@@ -141,6 +169,21 @@ export default function Checkout() {
 
     return () => clearTimeout(delayDebounceFn);
   }, [search]);
+
+  // Handle resuming a held bill passed from the parent state (sidebar navigation)
+  useEffect(() => {
+    if (resumedHeldBill) {
+      handleResumeHeldBill(resumedHeldBill);
+      onClearResumedHeldBill();
+    }
+  }, [resumedHeldBill]);
+
+  // Automatically sync paidAmount with final total unless cashier manually edited it
+  useEffect(() => {
+    if (!isPaidTouched) {
+      setPaidAmount(getFinalTotal().toFixed(2));
+    }
+  }, [cart, discountPercent, taxRate, isPaidTouched]);
 
   // --- HELPER FUNCTIONS ---
   
@@ -209,13 +252,30 @@ export default function Checkout() {
   const getSubtotal = () => cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const getTax = () => getSubtotal() * taxRate;
   const getDiscountAmount = () => getSubtotal() * (parseFloat(discountPercent || 0) / 100);
-  const getFinalTotal = () => (getSubtotal() - getDiscountAmount()) + getTax();
+  const getFinalTotal = () => (getSubtotal() - getDiscountAmount()) + getTax() + parseFloat(reduceDueAmount || 0);
 
   // --- SUBMIT CHECKOUT ---
   const handleCheckout = async () => {
-    if (cart.length === 0) {
+    if (cart.length === 0 && parseFloat(reduceDueAmount || 0) <= 0) {
       triggerAlert('error', 'Checkout cart is empty.');
       return;
+    }
+
+    const finalTotal = getFinalTotal();
+    const parsedPaid = paidAmount !== '' ? parseFloat(paidAmount) : finalTotal;
+    const dueAmount = finalTotal - parsedPaid;
+
+    if (parsedPaid < 0) {
+      triggerAlert('error', 'Amount Paid cannot be negative.');
+      return;
+    }
+
+    if (dueAmount > 0) {
+      const hasProfile = selectedCustomerId !== '' || (customerName.trim() !== '' && syncToDirectory);
+      if (!hasProfile) {
+        triggerAlert('error', 'Customer profile selection is required to record outstanding due balance.');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -280,6 +340,8 @@ export default function Checkout() {
         discount: getDiscountAmount(),
         tax: getTax(),
         payment_method: paymentMethod,
+        paid_amount: parsedPaid,
+        reduce_due_amount: parseFloat(reduceDueAmount || 0),
         items: cart.map(item => ({
           product_id: item.id,
           quantity: item.quantity
@@ -315,7 +377,8 @@ export default function Checkout() {
         customer_phone: customerPhone.trim() || '',
         customer_address: customerAddress.trim() || '',
         shop_name: currentUser?.shop_name || 'Boutique POS',
-        staff_name: currentUser?.name || 'Cashier'
+        staff_name: currentUser?.name || 'Cashier',
+        reduce_due_amount: parseFloat(reduceDueAmount || 0)
       });
 
       // Show warnings if inventory items hit low stock limit
@@ -335,6 +398,9 @@ export default function Checkout() {
       setCustomerAddress('');
       setSyncToDirectory(true);
       setMobileCartOpen(false);
+      setIsPaidTouched(false);
+      setPaidAmount('');
+      setReduceDueAmount(0);
       
       // Refresh local product stock list
       fetchProducts(search);
@@ -343,6 +409,186 @@ export default function Checkout() {
       triggerAlert('error', err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // --- HOLD BILL HANDLERS ---
+
+  const handleHoldBillSubmit = async (e) => {
+    e.preventDefault();
+    if (cart.length === 0) {
+      triggerAlert('error', 'Cart is empty. Nothing to hold.');
+      return;
+    }
+
+    setHoldingBill(true);
+    try {
+      const token = localStorage.getItem('token');
+      let finalCustomerId = selectedCustomerId ? parseInt(selectedCustomerId) : null;
+
+      const payloadItems = cart.map(item => ({
+        product_id: item.id,
+        quantity: item.quantity
+      }));
+
+      const payload = {
+        customer_id: finalCustomerId,
+        customer_name: customerName.trim() || null,
+        customer_phone: customerPhone.trim() || null,
+        customer_address: customerAddress.trim() || null,
+        discount_percent: discountPercent,
+        notes: holdNotes.trim(),
+        items: payloadItems
+      };
+
+      const response = await fetch(`${API_BASE_URL}/held-bills`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.error || 'Failed to hold bill.');
+
+      triggerAlert('success', 'Bill held successfully!');
+      
+      // Reset cart and info
+      setCart([]);
+      setDiscountPercent(0);
+      setSelectedCustomerId('');
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerAddress('');
+      setSyncToDirectory(true);
+      setHoldNotes('');
+      setShowHoldBillModal(false);
+      setIsPaidTouched(false);
+      setPaidAmount('');
+      setReduceDueAmount(0);
+
+      // Refresh list
+      fetchHeldBills();
+    } catch (err) {
+      triggerAlert('error', err.message);
+    } finally {
+      setHoldingBill(false);
+    }
+  };
+
+  const handleResumeHeldBill = async (heldBill) => {
+    if (cart.length > 0) {
+      if (!window.confirm('Resuming will overwrite your current active cart. Proceed?')) {
+        return;
+      }
+    }
+
+    try {
+      let heldItems = [];
+      if (typeof heldBill.items === 'string') {
+        heldItems = JSON.parse(heldBill.items);
+      } else {
+        heldItems = heldBill.items;
+      }
+
+      const reconstructedCart = [];
+      const missingProducts = [];
+      const stockCappedProducts = [];
+
+      for (const item of heldItems) {
+        let productObj = products.find(p => p.id === item.product_id);
+        
+        if (!productObj) {
+          try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`${API_BASE_URL}/products/${item.product_id}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+              productObj = await res.json();
+            }
+          } catch (e) {
+            console.error(`Failed to fetch details for product ID ${item.product_id}`, e);
+          }
+        }
+
+        if (!productObj) {
+          missingProducts.push(item.product_id);
+          continue;
+        }
+
+        let finalQty = item.quantity;
+        if (productObj.stock_quantity <= 0) {
+          stockCappedProducts.push(`${productObj.name} (out of stock)`);
+          continue;
+        } else if (finalQty > productObj.stock_quantity) {
+          finalQty = productObj.stock_quantity;
+          stockCappedProducts.push(`${productObj.name} (capped to ${finalQty})`);
+        }
+
+        reconstructedCart.push({
+          ...productObj,
+          quantity: finalQty
+        });
+      }
+
+      if (missingProducts.length > 0) {
+        triggerAlert('error', `Some products in this held bill were deleted or are unavailable.`);
+      }
+
+      if (stockCappedProducts.length > 0) {
+        triggerAlert('success', `Cart loaded! Note: stock limits adjusted for: ${stockCappedProducts.join(', ')}`);
+      } else {
+        triggerAlert('success', 'Held cart successfully resumed!');
+      }
+
+      setCart(reconstructedCart);
+      setDiscountPercent(parseFloat(heldBill.discount_percent || 0));
+      setReduceDueAmount(parseFloat(heldBill.due_amount || 0));
+      
+      if (heldBill.customer_id) {
+        setSelectedCustomerId(heldBill.customer_id);
+      } else {
+        setSelectedCustomerId('');
+        setCustomerName(heldBill.customer_name || '');
+        setCustomerPhone(heldBill.customer_phone || '');
+        setCustomerAddress(heldBill.customer_address || '');
+      }
+
+      setIsPaidTouched(false);
+      setPaidAmount('');
+
+      const token = localStorage.getItem('token');
+      await fetch(`${API_BASE_URL}/held-bills/${heldBill.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      setShowHeldBillsModal(false);
+      fetchHeldBills();
+    } catch (err) {
+      triggerAlert('error', `Failed to resume held bill: ${err.message}`);
+    }
+  };
+
+  const handleDeleteHeldBill = async (heldBillId) => {
+    if (!window.confirm('Are you sure you want to discard this held bill?')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/held-bills/${heldBillId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.error || 'Failed to delete held bill.');
+
+      triggerAlert('success', 'Held bill discarded successfully.');
+      fetchHeldBills();
+    } catch (err) {
+      triggerAlert('error', err.message);
     }
   };
 
@@ -536,6 +782,12 @@ export default function Checkout() {
                 <span>Tax ({(taxRate * 100).toString()}%):</span>
                 <span>৳{receipt.tax.toFixed(2)}</span>
               </div>
+              {receipt.reduce_due_amount > 0 && (
+                <div className="flex justify-between text-indigo-600 font-semibold">
+                  <span>Due Balance Paid:</span>
+                  <span>৳{receipt.reduce_due_amount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold text-slate-800 border-t border-slate-100 pt-2">
                 <span>Total Paid:</span>
                 <span className="text-indigo-600">৳{parseFloat(receipt.total).toFixed(2)}</span>
@@ -631,6 +883,12 @@ export default function Checkout() {
                 <span>Tax ({(taxRate * 100).toString()}%):</span>
                 <span>৳{receipt.tax.toFixed(2)}</span>
               </div>
+              {receipt.reduce_due_amount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                  <span>Due Paid:</span>
+                  <span>৳{receipt.reduce_due_amount.toFixed(2)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '3px', marginTop: '3px' }}>
                 <span>Total Paid:</span>
                 <span>৳{parseFloat(receipt.total).toFixed(2)}</span>
@@ -712,6 +970,12 @@ export default function Checkout() {
                   <span>Tax ({(taxRate * 100).toString()}%)</span>
                   <span style={{ fontWeight: '600', color: '#1e293b' }}>৳{receipt.tax.toFixed(2)}</span>
                 </div>
+                {receipt.reduce_due_amount > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#4f46e5', fontWeight: 'bold' }}>
+                    <span>Due Balance Paid</span>
+                    <span>৳{receipt.reduce_due_amount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: '15px', fontWeight: 'bold', borderTop: '2px solid #e2e8f0', marginTop: '6px' }}>
                   <span>Total Amount</span>
                   <span style={{ color: '#6366f1' }}>৳{parseFloat(receipt.total).toFixed(2)}</span>
@@ -727,6 +991,83 @@ export default function Checkout() {
         </div>,
         document.body
       )}
+
+      {/* --- HOLD BILL MODAL --- */}
+      {showHoldBillModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800">Hold Current Bill</h3>
+              <button onClick={() => setShowHoldBillModal(false)} className="text-slate-400 hover:text-slate-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={handleHoldBillSubmit} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Hold Reference / Note (e.g. Table Number, Name) *
+                </label>
+                <input
+                  type="text"
+                  value={holdNotes}
+                  onChange={(e) => setHoldNotes(e.target.value)}
+                  required
+                  placeholder="e.g. Table 5, Mr. Rabbani, In a hurry"
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 space-y-1">
+                <div className="flex justify-between font-semibold text-slate-700">
+                  <span>Cart Items Count:</span>
+                  <span>{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-slate-700">
+                  <span>Subtotal Amount:</span>
+                  <span>৳{getSubtotal().toFixed(2)}</span>
+                </div>
+                {selectedCustomerId && (
+                  <div className="flex justify-between">
+                    <span>Customer:</span>
+                    <span>{customerName}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex space-x-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowHoldBillModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={holdingBill || !holdNotes.trim()}
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white rounded-xl text-sm font-semibold transition-colors shadow flex items-center space-x-1.5"
+                >
+                  {holdingBill ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Hold Bill</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Held Bills Modal removed - handled by dedicated Held Bills page */}
 
     </div>
   );
@@ -748,11 +1089,15 @@ export default function Checkout() {
               className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Walk-in Customer</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.phone && c.phone !== '-' ? `(${c.phone})` : ''}
-                </option>
-              ))}
+              {customers.map(c => {
+                const balance = parseFloat(c.due_balance || 0);
+                const balanceStr = balance > 0 ? ` [Due: ৳${balance.toFixed(2)}]` : '';
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.phone && c.phone !== '-' ? `(${c.phone})` : ''}{balanceStr}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -760,6 +1105,20 @@ export default function Checkout() {
             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Customer Details
             </h4>
+
+            {selectedCustomerId && (() => {
+              const selected = customers.find(c => c.id === parseInt(selectedCustomerId));
+              const balance = parseFloat(selected?.due_balance || 0);
+              if (balance > 0) {
+                return (
+                  <div className="bg-rose-50 border border-rose-100 rounded-lg p-2 flex items-center justify-between text-xs text-rose-700">
+                    <span className="font-medium">Outstanding Due Balance:</span>
+                    <span className="font-bold">৳{balance.toFixed(2)}</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             
             <div className="grid grid-cols-1 gap-2">
               <div>
@@ -940,11 +1299,73 @@ export default function Checkout() {
               <span>Tax ({(taxRate * 100).toString()}%)</span>
               <span className="font-semibold">৳{getTax().toFixed(2)}</span>
             </div>
+
+            {parseFloat(reduceDueAmount || 0) > 0 && (
+              <div className="flex justify-between items-center bg-rose-50 border border-rose-100 rounded-lg p-2.5 text-rose-800 font-medium">
+                <span className="flex items-center">
+                  <svg className="w-3.5 h-3.5 mr-1 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  Due Balance Payment
+                </span>
+                <div className="flex items-center space-x-1.5">
+                  <span className="font-bold">৳{parseFloat(reduceDueAmount).toFixed(2)}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReduceDueAmount(0);
+                      setIsPaidTouched(false);
+                    }}
+                    className="text-rose-400 hover:text-rose-600 font-extrabold text-sm px-1"
+                    title="Remove Due Payment"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
             
             <div className="flex justify-between text-base font-extrabold text-slate-800 border-t border-slate-200/60 pt-2">
               <span>Final Total</span>
               <span className="text-indigo-600">৳{getFinalTotal().toFixed(2)}</span>
             </div>
+
+            {/* Amount Paid input */}
+            <div className="flex justify-between items-center border-t border-slate-200/60 pt-2">
+              <span className="font-semibold">Amount Paid</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={paidAmount}
+                onChange={(e) => {
+                  setPaidAmount(e.target.value);
+                  setIsPaidTouched(true);
+                }}
+                placeholder={getFinalTotal().toFixed(2)}
+                className="w-24 border border-slate-200 rounded px-1.5 py-0.5 text-right font-semibold text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
+            {(() => {
+              const finalTotal = getFinalTotal();
+              const parsedPaid = paidAmount !== '' ? parseFloat(paidAmount) : finalTotal;
+              const dueAmount = finalTotal - parsedPaid;
+              if (dueAmount > 0) {
+                return (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-2 space-y-1 text-xs text-amber-800">
+                    <div className="flex justify-between">
+                      <span className="font-medium">Outstanding Due:</span>
+                      <span className="font-bold">৳{dueAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="text-[10px] text-amber-600 font-semibold text-right">
+                      * Customer Profile Required
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           {/* Payment Method Selector */}
@@ -970,23 +1391,37 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* Checkout Submit Trigger */}
-          <button
-            onClick={handleCheckout}
-            disabled={cart.length === 0 || submitting}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex justify-center items-center space-x-2 mt-4"
-          >
-            {submitting ? (
-              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-            ) : (
-              <>
-                <span>Complete Checkout</span>
-                <span className="font-extrabold bg-indigo-500 px-2 py-0.5 rounded text-xs">
-                  ৳{getFinalTotal().toFixed(2)}
-                </span>
-              </>
-            )}
-          </button>
+          {/* Action Triggers */}
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => setShowHoldBillModal(true)}
+              disabled={cart.length === 0}
+              className="col-span-1 bg-amber-50 hover:bg-amber-100 disabled:bg-slate-100 disabled:text-slate-400 text-amber-700 border border-amber-200 disabled:border-slate-200 font-bold py-3 px-2 rounded-xl transition-colors flex justify-center items-center space-x-1.5"
+              title="Hold Cart"
+            >
+              <svg className="w-4 h-4 text-amber-600 disabled:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs">Hold Bill</span>
+            </button>
+            <button
+              onClick={handleCheckout}
+              disabled={cart.length === 0 || submitting}
+              className="col-span-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex justify-center items-center space-x-2"
+            >
+              {submitting ? (
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+              ) : (
+                <>
+                  <span>Complete Checkout</span>
+                  <span className="font-extrabold bg-indigo-500 px-2 py-0.5 rounded text-xs">
+                    ৳{getFinalTotal().toFixed(2)}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
 
         </div>
       </div>

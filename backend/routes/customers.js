@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
   const shopId = req.shopId;
   try {
     const [customers] = await db.query(
-      'SELECT id, name, phone, email, address FROM customers WHERE shop_id = ? ORDER BY name ASC',
+      'SELECT id, name, phone, email, address, due_balance FROM customers WHERE shop_id = ? ORDER BY name ASC',
       [shopId]
     );
     res.json(customers);
@@ -141,6 +141,8 @@ router.get('/:id/history', async (req, res) => {
         s.discount,
         s.tax,
         s.final_amount,
+        s.paid_amount,
+        s.due_amount,
         si.id AS item_id,
         si.quantity,
         si.unit_price,
@@ -166,6 +168,8 @@ router.get('/:id/history', async (req, res) => {
           discount: row.discount,
           tax: row.tax,
           final_amount: row.final_amount,
+          paid_amount: row.paid_amount,
+          due_amount: row.due_amount,
           items: []
         };
       }
