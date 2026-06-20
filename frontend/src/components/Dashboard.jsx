@@ -3,14 +3,22 @@ import React, { useState, useEffect } from 'react';
 const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function Dashboard() {
+  const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = userObj.role === 'super_admin';
+
   const [metrics, setMetrics] = useState({
     total_sales: 0,
     revenue: '0.00',
     total_products: 0,
     low_stock_alerts: 0,
-    total_customers: 0
+    total_customers: 0,
+    total_shops: 0,
+    active_shops: 0,
+    total_users: 0,
+    global_revenue: '0.00'
   });
   const [recentSales, setRecentSales] = useState([]);
+  const [tenantBreakdown, setTenantBreakdown] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -32,6 +40,9 @@ export default function Dashboard() {
       }
       if (data.recent_sales) {
         setRecentSales(data.recent_sales);
+      }
+      if (data.tenant_breakdown) {
+        setTenantBreakdown(data.tenant_breakdown);
       }
     } catch (err) {
       console.error(err);
@@ -57,6 +68,138 @@ export default function Dashboard() {
     return (
       <div className="bg-rose-50 text-rose-600 border border-rose-100 rounded-xl p-4 text-center">
         Error loading analytics: {error}
+      </div>
+    );
+  }
+
+  if (isSuperAdmin) {
+    return (
+      <div className="space-y-6">
+        
+        {/* 1. Header Row */}
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Global System Analytics</h2>
+          <p className="text-sm text-slate-500">Real-time cross-tenant metrics and shop performance indicators</p>
+        </div>
+
+        {/* 2. Key Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          
+          {/* Global Revenue */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center space-x-4">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Gross System Revenue</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">৳{parseFloat(metrics.global_revenue || 0).toFixed(2)}</h3>
+            </div>
+          </div>
+
+          {/* Active Shops */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center space-x-4">
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Tenant Shops</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">{metrics.active_shops} / {metrics.total_shops}</h3>
+            </div>
+          </div>
+
+          {/* Sales Count */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center space-x-4">
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Sales Count</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">{metrics.total_sales}</h3>
+            </div>
+          </div>
+
+          {/* System Users */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center space-x-4">
+            <div className="p-3 bg-violet-50 text-violet-600 rounded-xl">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total System Users</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">{metrics.total_users}</h3>
+            </div>
+          </div>
+
+        </div>
+
+        {/* 3. Detailed Data Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Left Col: Shop Breakdown (Span 2) */}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Tenant Shops Breakdown</h3>
+            <div className="flex-1 overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="pb-3">Shop Name</th>
+                    <th className="pb-3 text-center">Transactions</th>
+                    <th className="pb-3 text-right">Gross Revenue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 text-sm">
+                  {tenantBreakdown.length === 0 ? (
+                    <tr>
+                      <td colSpan="3" className="py-8 text-center text-slate-400">
+                        No active shops recorded.
+                      </td>
+                    </tr>
+                  ) : (
+                    tenantBreakdown.map((shop, index) => (
+                      <tr key={index} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3.5 font-semibold text-slate-800">{shop.shop_name}</td>
+                        <td className="py-3.5 text-center text-slate-600 font-medium">{shop.sales_count || 0}</td>
+                        <td className="py-3.5 text-right font-extrabold text-indigo-600">
+                          ৳{parseFloat(shop.shop_revenue || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Right Col: Quick Links */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <h3 className="text-lg font-bold text-slate-800">Quick Administrator Links</h3>
+            <div className="space-y-3">
+              <a
+                href="/shops"
+                onClick={(e) => { e.preventDefault(); window.location.pathname = '/shops'; }}
+                className="w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow transition-colors text-center"
+              >
+                <span>Manage Tenant Shops</span>
+              </a>
+              <a
+                href="/users"
+                onClick={(e) => { e.preventDefault(); window.location.pathname = '/users'; }}
+                className="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow transition-colors text-center"
+              >
+                <span>Manage System Users</span>
+              </a>
+            </div>
+          </div>
+
+        </div>
+
       </div>
     );
   }

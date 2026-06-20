@@ -10,6 +10,7 @@ import SalesHistory from './components/SalesHistory';
 import ManageStaff from './components/ManageStaff';
 import Settings from './components/Settings';
 import ManageShops from './components/ManageShops';
+import SystemUsers from './components/SystemUsers';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -141,6 +142,7 @@ export default function App() {
       switch (currentPath) {
         case '/dashboard': return <Dashboard />;
         case '/shops':     return <ManageShops />;
+        case '/users':     return <SystemUsers />;
         case '/settings':  return <Settings />;
         default:           return <Dashboard />;
       }
