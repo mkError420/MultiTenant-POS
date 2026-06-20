@@ -11,6 +11,7 @@ export default function Settings() {
     email: '',
     phone: '',
     address: '',
+    tax_rate: '10.00',
     password: '',
     confirmPassword: ''
   });
@@ -37,6 +38,7 @@ export default function Settings() {
           email: data.email || '',
           phone: '',
           address: '',
+          tax_rate: '10.00',
           password: '',
           confirmPassword: ''
         });
@@ -46,6 +48,7 @@ export default function Settings() {
           email: data.email || '',
           phone: data.phone || '',
           address: data.address || '',
+          tax_rate: data.tax_rate !== undefined ? data.tax_rate : '10.00',
           password: '',
           confirmPassword: ''
         });
@@ -95,7 +98,7 @@ export default function Settings() {
       
       const bodyData = isSuperAdmin 
         ? { name: formData.name, email: formData.email, password: formData.password || undefined }
-        : { name: formData.name, email: formData.email, phone: formData.phone, address: formData.address };
+        : { name: formData.name, email: formData.email, phone: formData.phone, address: formData.address, tax_rate: formData.tax_rate };
 
       const response = await fetch(url, {
         method: 'PUT',
@@ -218,6 +221,24 @@ export default function Settings() {
                   className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
                   placeholder="e.g. 123 Main Street, Suite 400"
                 ></textarea>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Sales Tax Rate (%) *
+                </label>
+                <input
+                  type="number"
+                  name="tax_rate"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  required
+                  value={formData.tax_rate}
+                  onChange={handleInputChange}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="e.g. 10.00"
+                />
               </div>
             </>
           ) : (

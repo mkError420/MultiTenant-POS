@@ -17,7 +17,7 @@ export default function Checkout() {
   const [syncToDirectory, setSyncToDirectory] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [discount, setDiscount] = useState(0);
-  const [taxRate] = useState(0.1); // 10% Flat Tax Rate
+  const [taxRate, setTaxRate] = useState(0.10); // Dynamic Tax Rate (default 10%)
   const [paymentMethod, setPaymentMethod] = useState('cash');
   
   // UI States
@@ -108,10 +108,29 @@ export default function Checkout() {
     }
   };
 
+  // 3. Fetch shop settings (for tax rate)
+  const fetchShopSettings = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/shops/my-shop`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.tax_rate !== undefined) {
+          setTaxRate(parseFloat(data.tax_rate) / 100);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch shop settings for tax rate', e);
+    }
+  };
+
   // Fetch initial product list & customer directory
   useEffect(() => {
     fetchProducts();
     fetchCustomers();
+    fetchShopSettings();
   }, []);
 
   // Debounced/delayed search triggers on input change
@@ -513,7 +532,7 @@ export default function Checkout() {
                 </div>
               )}
               <div className="flex justify-between text-slate-500">
-                <span>Tax (10%):</span>
+                <span>Tax ({(taxRate * 100).toString()}%):</span>
                 <span>৳{receipt.tax.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-lg font-bold text-slate-800 border-t border-slate-100 pt-2">
@@ -608,7 +627,7 @@ export default function Checkout() {
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Tax (10%):</span>
+                <span>Tax ({(taxRate * 100).toString()}%):</span>
                 <span>৳{receipt.tax.toFixed(2)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '3px', marginTop: '3px' }}>
@@ -689,7 +708,7 @@ export default function Checkout() {
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#64748b' }}>
-                  <span>Tax (10%)</span>
+                  <span>Tax ({(taxRate * 100).toString()}%)</span>
                   <span style={{ fontWeight: '600', color: '#1e293b' }}>৳{receipt.tax.toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: '15px', fontWeight: 'bold', borderTop: '2px solid #e2e8f0', marginTop: '6px' }}>
@@ -910,7 +929,7 @@ export default function Checkout() {
             </div>
 
             <div className="flex justify-between">
-              <span>Tax (10%)</span>
+              <span>Tax ({(taxRate * 100).toString()}%)</span>
               <span className="font-semibold">৳{getTax().toFixed(2)}</span>
             </div>
             

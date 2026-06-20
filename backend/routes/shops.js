@@ -32,7 +32,7 @@ router.get('/my-shop', enforceTenant, authorize(['shop_admin', 'shop_staff']), a
   const shopId = req.shopId;
   try {
     const [shops] = await db.query(
-      'SELECT id, name, email, phone, address, status, created_at FROM shops WHERE id = ?',
+      'SELECT id, name, email, phone, address, tax_rate, status, created_at FROM shops WHERE id = ?',
       [shopId]
     );
 
@@ -53,10 +53,15 @@ router.get('/my-shop', enforceTenant, authorize(['shop_admin', 'shop_staff']), a
  */
 router.put('/my-shop', enforceTenant, authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
-  const { name, email, phone, address } = req.body;
+  const { name, email, phone, address, tax_rate } = req.body;
 
   if (!name || !email) {
     return res.status(400).json({ error: 'Shop name and email are required.' });
+  }
+
+  const taxRateVal = tax_rate !== undefined ? parseFloat(tax_rate) : 10.00;
+  if (isNaN(taxRateVal) || taxRateVal < 0 || taxRateVal > 100) {
+    return res.status(400).json({ error: 'Tax rate must be a valid number between 0 and 100.' });
   }
 
   try {
@@ -70,8 +75,8 @@ router.put('/my-shop', enforceTenant, authorize(['shop_admin']), async (req, res
     }
 
     await db.query(
-      'UPDATE shops SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?',
-      [name, email, phone || null, address || null, shopId]
+      'UPDATE shops SET name = ?, email = ?, phone = ?, address = ?, tax_rate = ? WHERE id = ?',
+      [name, email, phone || null, address || null, taxRateVal, shopId]
     );
 
     res.json({ message: 'Shop details updated successfully.' });
@@ -115,10 +120,15 @@ router.put('/:id/status', authorize(['super_admin']), async (req, res) => {
  */
 router.put('/:id', authorize(['super_admin']), async (req, res) => {
   const shopId = req.params.id;
-  const { name, email, phone, address } = req.body;
+  const { name, email, phone, address, tax_rate } = req.body;
 
   if (!name || !email) {
     return res.status(400).json({ error: 'Shop name and email are required.' });
+  }
+
+  const taxRateVal = tax_rate !== undefined ? parseFloat(tax_rate) : 10.00;
+  if (isNaN(taxRateVal) || taxRateVal < 0 || taxRateVal > 100) {
+    return res.status(400).json({ error: 'Tax rate must be a valid number between 0 and 100.' });
   }
 
   try {
@@ -137,8 +147,8 @@ router.put('/:id', authorize(['super_admin']), async (req, res) => {
     }
 
     await db.query(
-      'UPDATE shops SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?',
-      [name, email, phone || null, address || null, shopId]
+      'UPDATE shops SET name = ?, email = ?, phone = ?, address = ?, tax_rate = ? WHERE id = ?',
+      [name, email, phone || null, address || null, taxRateVal, shopId]
     );
 
     res.json({ message: 'Shop details updated successfully.' });
@@ -156,8 +166,9 @@ router.put('/:id', authorize(['super_admin']), async (req, res) => {
 router.delete('/:id', authorize(['super_admin']), async (req, res) => {
   const shopId = req.params.id;
 
+  const connection = await db.getConnection();
   try {
-    const [existing] = await db.query(
+    const [existing] = await connection.query(
       'SELECT id, name FROM shops WHERE id = ?',
       [shopId]
     );
@@ -165,29 +176,38 @@ router.delete('/:id', authorize(['super_admin']), async (req, res) => {
       return res.status(404).json({ error: 'Shop not found.' });
     }
 
-    // Safety: block deletion if the shop has active users
-    const [activeUsers] = await db.query(
-      'SELECT COUNT(*) as count FROM users WHERE shop_id = ? AND status = "active"',
-      [shopId]
-    );
-    if (activeUsers[0].count > 0) {
-      return res.status(400).json({
-        error: `Cannot delete shop. It has ${activeUsers[0].count} active user(s). Suspend all users first, or deactivate the shop instead.`
-      });
-    }
+    await connection.beginTransaction();
 
-    // Delete the shop — cascades will clean up related data per FK rules
-    await db.query('DELETE FROM shops WHERE id = ?', [shopId]);
+    // 1. Delete sale items belonging to the shop
+    await connection.query('DELETE FROM sale_items WHERE shop_id = ?', [shopId]);
 
-    res.json({ message: `Shop "${existing[0].name}" has been permanently deleted.` });
+    // 2. Delete sales belonging to the shop
+    await connection.query('DELETE FROM sales WHERE shop_id = ?', [shopId]);
+
+    // 3. Delete products belonging to the shop
+    await connection.query('DELETE FROM products WHERE shop_id = ?', [shopId]);
+
+    // 4. Delete customers belonging to the shop
+    await connection.query('DELETE FROM customers WHERE shop_id = ?', [shopId]);
+
+    // 5. Delete users belonging to the shop
+    await connection.query('DELETE FROM users WHERE shop_id = ?', [shopId]);
+
+    // 6. Delete suppliers belonging to the shop
+    await connection.query('DELETE FROM suppliers WHERE shop_id = ?', [shopId]);
+
+    // 7. Delete the shop itself
+    await connection.query('DELETE FROM shops WHERE id = ?', [shopId]);
+
+    await connection.commit();
+
+    res.json({ message: `Shop "${existing[0].name}" and all associated users/data have been permanently deleted.` });
   } catch (error) {
-    console.error('Delete shop error:', error);
-    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
-      return res.status(400).json({
-        error: 'Cannot delete shop. It still has associated sales or inventory records. Deactivate the shop instead.'
-      });
-    }
-    res.status(500).json({ error: 'Server error deleting shop.' });
+    await connection.rollback();
+    console.error('Delete shop transaction error:', error);
+    res.status(500).json({ error: 'Failed to delete shop and its associated data.' });
+  } finally {
+    connection.release();
   }
 });
 

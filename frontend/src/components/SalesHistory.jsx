@@ -229,7 +229,9 @@ export default function SalesHistory() {
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span>Tax (10%):</span>
+                    <span>
+                      Tax ({saleDetails.total_amount > 0 ? ((parseFloat(saleDetails.tax) / parseFloat(saleDetails.total_amount)) * 100).toFixed(1).replace(/\.0$/, '') : 10}%):
+                    </span>
                     <span>৳{parseFloat(saleDetails.tax).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-base font-extrabold text-slate-800 border-t border-slate-200/60 pt-2">
