@@ -305,7 +305,7 @@ export default function Checkout() {
                       <div className="mt-4">
                         <div className="flex items-baseline justify-between">
                           <span className="text-base font-extrabold text-slate-800">
-                            ${parseFloat(product.price).toFixed(2)}
+                            ৳{parseFloat(product.price).toFixed(2)}
                           </span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                             remainingQty <= product.low_stock_threshold
@@ -336,7 +336,7 @@ export default function Checkout() {
         <div>
           <p className="text-xs text-slate-400 font-medium">Active Cart</p>
           <p className="text-lg font-bold text-slate-800">
-            {cart.reduce((sum, item) => sum + item.quantity, 0)} Items - <span className="text-indigo-600">${getFinalTotal().toFixed(2)}</span>
+            {cart.reduce((sum, item) => sum + item.quantity, 0)} Items - <span className="text-indigo-600">৳{getFinalTotal().toFixed(2)}</span>
           </p>
         </div>
         <button
@@ -388,9 +388,9 @@ export default function Checkout() {
                 <div key={item.id} className="py-2 flex justify-between text-xs text-slate-700">
                   <div>
                     <span className="font-semibold">{item.name}</span>
-                    <span className="text-slate-400 block">x{item.quantity} @ ${item.price}</span>
+                    <span className="text-slate-400 block">x{item.quantity} @ ৳{item.price}</span>
                   </div>
-                  <span className="font-bold">${(item.price * item.quantity).toFixed(2)}</span>
+                  <span className="font-bold">৳{(item.price * item.quantity).toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -399,21 +399,21 @@ export default function Checkout() {
             <div className="border-t border-dashed border-slate-200 pt-3 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-500">
                 <span>Subtotal:</span>
-                <span>${receipt.subtotal.toFixed(2)}</span>
+                <span>৳{receipt.subtotal.toFixed(2)}</span>
               </div>
               {receipt.discount > 0 && (
                 <div className="flex justify-between text-rose-500">
                   <span>Discount:</span>
-                  <span>-${receipt.discount.toFixed(2)}</span>
+                  <span>-৳{receipt.discount.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-slate-500">
                 <span>Tax (10%):</span>
-                <span>${receipt.tax.toFixed(2)}</span>
+                <span>৳{receipt.tax.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-lg font-bold text-slate-800 border-t border-slate-100 pt-2">
                 <span>Total Paid:</span>
-                <span className="text-indigo-600">${parseFloat(receipt.total).toFixed(2)}</span>
+                <span className="text-indigo-600">৳{parseFloat(receipt.total).toFixed(2)}</span>
               </div>
               <div className="text-center pt-2 text-[10px] text-slate-400">
                 Paid via {receipt.payment_method.toUpperCase()}
@@ -480,7 +480,7 @@ export default function Checkout() {
               <div key={item.id} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
                 <div className="min-w-0 pr-3">
                   <h4 className="text-sm font-semibold text-slate-800 truncate">{item.name}</h4>
-                  <span className="text-xs text-slate-500">${parseFloat(item.price).toFixed(2)}</span>
+                  <span className="text-xs text-slate-500">৳{parseFloat(item.price).toFixed(2)}</span>
                 </div>
 
                 <div className="flex items-center space-x-3">
@@ -524,12 +524,12 @@ export default function Checkout() {
           <div className="space-y-1.5 text-xs text-slate-600">
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span className="font-semibold">${getSubtotal().toFixed(2)}</span>
+              <span className="font-semibold">৳{getSubtotal().toFixed(2)}</span>
             </div>
             
             {/* Discount Manual Inputs */}
             <div className="flex justify-between items-center">
-              <span>Discount ($)</span>
+              <span>Discount (৳)</span>
               <input
                 type="number"
                 min="0"
@@ -542,12 +542,12 @@ export default function Checkout() {
 
             <div className="flex justify-between">
               <span>Tax (10%)</span>
-              <span className="font-semibold">${getTax().toFixed(2)}</span>
+              <span className="font-semibold">৳{getTax().toFixed(2)}</span>
             </div>
             
             <div className="flex justify-between text-base font-extrabold text-slate-800 border-t border-slate-200/60 pt-2">
               <span>Final Total</span>
-              <span className="text-indigo-600">${getFinalTotal().toFixed(2)}</span>
+              <span className="text-indigo-600">৳{getFinalTotal().toFixed(2)}</span>
             </div>
           </div>
 
@@ -586,7 +586,7 @@ export default function Checkout() {
               <>
                 <span>Complete Checkout</span>
                 <span className="font-extrabold bg-indigo-500 px-2 py-0.5 rounded text-xs">
-                  ${getFinalTotal().toFixed(2)}
+                  ৳{getFinalTotal().toFixed(2)}
                 </span>
               </>
             )}

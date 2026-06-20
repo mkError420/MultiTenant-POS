@@ -266,8 +266,8 @@ export default function Inventory() {
                     <tr key={product.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4 font-mono text-xs font-bold text-slate-500">{product.sku}</td>
                       <td className="p-4 font-semibold text-slate-800">{product.name}</td>
-                      <td className="p-4 text-slate-600">${parseFloat(product.cost_price).toFixed(2)}</td>
-                      <td className="p-4 font-extrabold text-slate-800">${parseFloat(product.price).toFixed(2)}</td>
+                      <td className="p-4 text-slate-600">৳{parseFloat(product.cost_price).toFixed(2)}</td>
+                      <td className="p-4 font-extrabold text-slate-800">৳{parseFloat(product.price).toFixed(2)}</td>
                       <td className="p-4">
                         <span className={`px-2.5 py-0.5 rounded text-xs font-bold ${
                           isLowStock

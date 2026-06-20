@@ -143,7 +143,7 @@ export default function SalesHistory() {
                         {sale.payment_method.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="p-4 text-right font-extrabold text-indigo-600">${parseFloat(sale.final_amount).toFixed(2)}</td>
+                    <td className="p-4 text-right font-extrabold text-indigo-600">৳{parseFloat(sale.final_amount).toFixed(2)}</td>
                     <td className="p-4 text-center">
                       <button
                         onClick={() => openReceipt(sale)}
@@ -209,9 +209,9 @@ export default function SalesHistory() {
                     <div key={item.id} className="py-2.5 flex justify-between text-xs text-slate-700">
                       <div>
                         <p className="font-semibold text-slate-800">{item.product_name}</p>
-                        <span className="text-[10px] text-slate-400">{item.product_sku} (x{item.quantity} @ ${item.unit_price})</span>
+                        <span className="text-[10px] text-slate-400">{item.product_sku} (x{item.quantity} @ ৳{item.unit_price})</span>
                       </div>
-                      <span className="font-bold text-slate-800">${parseFloat(item.subtotal).toFixed(2)}</span>
+                      <span className="font-bold text-slate-800">৳{parseFloat(item.subtotal).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -220,21 +220,21 @@ export default function SalesHistory() {
                 <div className="border-t border-slate-100 pt-3 mt-2 space-y-1.5 text-xs text-slate-600">
                   <div className="flex justify-between">
                     <span>Subtotal:</span>
-                    <span>${parseFloat(saleDetails.total_amount).toFixed(2)}</span>
+                    <span>৳{parseFloat(saleDetails.total_amount).toFixed(2)}</span>
                   </div>
                   {parseFloat(saleDetails.discount) > 0 && (
                     <div className="flex justify-between text-rose-500">
                       <span>Discount deduction:</span>
-                      <span>-${parseFloat(saleDetails.discount).toFixed(2)}</span>
+                      <span>-৳{parseFloat(saleDetails.discount).toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span>Tax (10%):</span>
-                    <span>${parseFloat(saleDetails.tax).toFixed(2)}</span>
+                    <span>৳{parseFloat(saleDetails.tax).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-base font-extrabold text-slate-800 border-t border-slate-200/60 pt-2">
                     <span>Final Amount Paid:</span>
-                    <span className="text-indigo-600">${parseFloat(saleDetails.final_amount).toFixed(2)}</span>
+                    <span className="text-indigo-600">৳{parseFloat(saleDetails.final_amount).toFixed(2)}</span>
                   </div>
                 </div>
 

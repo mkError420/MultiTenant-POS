@@ -82,7 +82,7 @@ export default function Dashboard() {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Gross Revenue</p>
-            <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">${parseFloat(metrics.revenue).toFixed(2)}</h3>
+            <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">৳{parseFloat(metrics.revenue).toFixed(2)}</h3>
           </div>
         </div>
 
@@ -165,7 +165,7 @@ export default function Dashboard() {
                         {new Date(sale.created_at).toLocaleDateString()}
                       </td>
                       <td className="py-3.5 text-right font-extrabold text-indigo-600">
-                        ${parseFloat(sale.final_amount).toFixed(2)}
+                        ৳{parseFloat(sale.final_amount).toFixed(2)}
                       </td>
                     </tr>
                   ))
