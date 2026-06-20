@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 // Simulated base URL for API requests
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -558,7 +559,7 @@ export default function Checkout() {
       )}
 
       {/* --- DYNAMIC PRINT AREA (OFF-SCREEN ON APPLICATION SCREEN, SHOWN VIA PRINT MEDIA CLASS) --- */}
-      {receipt && (
+      {receipt && createPortal(
         <div id="receipt-print-area">
           {/* Thermal View Container */}
           <div className="thermal-only">
@@ -703,7 +704,8 @@ export default function Checkout() {
               <p style={{ margin: '0' }}>Please contact us for any inquiry regarding this invoice.</p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -26,6 +27,14 @@ export default function Customers() {
     phone: '',
     address: ''
   });
+
+  const handleHistoryPrint = () => {
+    document.body.classList.add('print-mode-history');
+    window.print();
+    setTimeout(() => {
+      document.body.classList.remove('print-mode-history');
+    }, 500);
+  };
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -430,14 +439,27 @@ export default function Customers() {
                 <h3 className="text-lg font-bold text-slate-800">Purchase History</h3>
                 <p className="text-xs text-slate-500">Customer Profile: <span className="font-semibold text-indigo-600">{historyCustomer?.name}</span></p>
               </div>
-              <button 
-                onClick={() => { setShowHistoryModal(false); setHistorySales([]); }} 
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center space-x-2">
+                {!historyLoading && historySales.length > 0 && (
+                  <button
+                    onClick={handleHistoryPrint}
+                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors flex items-center space-x-1"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    <span>Print PDF</span>
+                  </button>
+                )}
+                <button 
+                  onClick={() => { setShowHistoryModal(false); setHistorySales([]); }} 
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             
             <div className="mt-4 flex-1 overflow-y-auto min-h-0 space-y-4 pr-1">
@@ -529,7 +551,107 @@ export default function Customers() {
           </div>
         </div>
       )}
+      {/* --- DYNAMIC HISTORY PRINT AREA (OFF-SCREEN) --- */}
+      {historyCustomer && createPortal(
+        <div id="history-print-area">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #cbd5e1', paddingBottom: '16px', marginBottom: '20px' }}>
+            <div>
+              <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 4px 0' }}>
+                Customer Purchase History Report
+              </h1>
+              <p style={{ margin: '0 0 2px 0', color: '#64748b' }}>Store Record Summary</p>
+              <p style={{ margin: '0', color: '#64748b', fontSize: '12px' }}>Report Generated: {new Date().toLocaleString()}</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981', margin: '0 0 4px 0' }}>PROFILE SUMMARY</h2>
+              <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '12px' }}><strong>Customer ID:</strong> #{historyCustomer.id}</p>
+            </div>
+          </div>
 
+          {/* Customer Details Block */}
+          <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px 0' }}>
+              Customer Information
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
+              <div><strong>Name:</strong> {historyCustomer.name}</div>
+              <div><strong>Phone Number:</strong> {historyCustomer.phone || '-'}</div>
+              <div><strong>Email:</strong> {historyCustomer.email || '-'}</div>
+              <div><strong>Address:</strong> {historyCustomer.address || '-'}</div>
+            </div>
+          </div>
+
+          {/* Purchases List */}
+          <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '12px', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
+            Transaction Records ({historySales.length} sales)
+          </h3>
+
+          {historySales.length === 0 ? (
+            <p style={{ color: '#64748b', fontStyle: 'italic', fontSize: '13px' }}>No transaction history found for this customer.</p>
+          ) : (
+            <div style={{ spaceY: '20px' }}>
+              {historySales.map((sale) => (
+                <div key={sale.sale_id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', marginBottom: '16px', pageBreakInside: 'avoid' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px', marginBottom: '8px', fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>
+                    <span>Transaction #{sale.sale_id} - {new Date(sale.created_at).toLocaleString()}</span>
+                    <span>Method: {sale.payment_method.toUpperCase()}</span>
+                  </div>
+
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
+                        <th style={{ paddingBottom: '4px' }}>Purchased Product</th>
+                        <th style={{ paddingBottom: '4px', textAlign: 'center' }}>Qty</th>
+                        <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Unit Price</th>
+                        <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sale.items.map((item) => (
+                        <tr key={item.item_id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                          <td style={{ padding: '6px 0' }}>{item.product_name}</td>
+                          <td style={{ padding: '6px 0', textAlign: 'center' }}>{item.quantity}</td>
+                          <td style={{ padding: '6px 0', textAlign: 'right' }}>৳{parseFloat(item.unit_price).toFixed(2)}</td>
+                          <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: '600' }}>৳{parseFloat(item.subtotal).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+                    <div style={{ width: '200px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Subtotal:</span>
+                        <span>৳{parseFloat(sale.total_amount).toFixed(2)}</span>
+                      </div>
+                      {parseFloat(sale.discount) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef4444' }}>
+                          <span>Discount:</span>
+                          <span>-৳{parseFloat(sale.discount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Tax:</span>
+                        <span>৳{parseFloat(sale.tax).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', color: '#1e293b', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '2px' }}>
+                        <span>Total:</span>
+                        <span>৳{parseFloat(sale.final_amount).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Report Footer */}
+          <div style={{ borderTop: '2px solid #cbd5e1', paddingTop: '10px', marginTop: '30px', textAlign: 'center', color: '#94a3b8', fontSize: '11px' }}>
+            <p style={{ margin: '0' }}>End of Purchase History Report for {historyCustomer.name}.</p>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

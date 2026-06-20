@@ -22,7 +22,7 @@
 }
 
 /* --- PRINT SYSTEM STYLES --- */
-#receipt-print-area {
+#receipt-print-area, #history-print-area {
   display: none;
 }
 
@@ -35,12 +35,14 @@
   button, 
   .fixed, 
   .absolute, 
-  .modal-backdrop,
-  body > *:not(#receipt-print-area) {
+  .modal-backdrop {
     display: none !important;
   }
   
-  #receipt-print-area {
+  /* Show only the targeted print area */
+  body.print-mode-thermal #receipt-print-area,
+  body.print-mode-regular #receipt-print-area,
+  body.print-mode-history #history-print-area {
     display: block !important;
     position: absolute;
     left: 0;
@@ -92,5 +94,24 @@
     font-size: 13px !important;
     line-height: 1.5 !important;
   }
+
+  /* History report mode layout (A4 width) */
+  body.print-mode-history {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  
+  body.print-mode-history #history-print-area {
+    width: 100% !important;
+    max-width: 800px !important;
+    margin: 0 auto !important;
+    padding: 15mm !important;
+    font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+  }
 }
+
 
