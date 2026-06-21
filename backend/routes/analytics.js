@@ -11,14 +11,15 @@ router.use(authenticate);
  * @desc    Fetch revenue breakdown: sales revenue, product buying costs, other costs, net profits
  * @access  Private (shop_admin)
  */
-router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
+router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res) => {
   const shopId = req.shopId;
+  const hasShop = shopId !== null && shopId !== undefined;
   const { start_date, end_date } = req.query;
 
   try {
     // 1. Calculate Sales Revenue
-    let salesQuery = 'SELECT SUM(final_amount) AS total_sales, COUNT(id) AS sales_count FROM sales WHERE shop_id = ?';
-    const salesParams = [shopId];
+    let salesQuery = 'SELECT SUM(final_amount) AS total_sales, COUNT(id) AS sales_count FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
+    const salesParams = hasShop ? [shopId] : [];
     if (start_date && end_date) {
       salesQuery += ' AND created_at BETWEEN ? AND ?';
       salesParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
@@ -33,9 +34,8 @@ router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
       FROM sale_items si 
       JOIN products p ON si.product_id = p.id
       JOIN sales s ON si.sale_id = s.id
-      WHERE si.shop_id = ?
-    `;
-    const cogsParams = [shopId];
+      WHERE ` + (hasShop ? 'si.shop_id = ?' : '1=1');
+    const cogsParams = hasShop ? [shopId] : [];
     if (start_date && end_date) {
       cogsQuery += ' AND s.created_at BETWEEN ? AND ?';
       cogsParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
@@ -44,8 +44,8 @@ router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
     const totalCOGS = parseFloat(cogsRows[0].cogs || 0);
 
     // 3. Calculate Product Purchasing Costs (Received POs)
-    let poQuery = "SELECT SUM(total_amount) AS total_purchased FROM purchase_orders WHERE shop_id = ? AND status = 'received'";
-    const poParams = [shopId];
+    let poQuery = "SELECT SUM(total_amount) AS total_purchased FROM purchase_orders WHERE " + (hasShop ? "shop_id = ?" : "1=1") + " AND status = 'received'";
+    const poParams = hasShop ? [shopId] : [];
     if (start_date && end_date) {
       poQuery += ' AND received_date BETWEEN ? AND ?';
       poParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
@@ -54,8 +54,8 @@ router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
     const totalPurchasing = parseFloat(poRows[0].total_purchased || 0);
 
     // 4. Calculate Other Costs
-    let otherQuery = 'SELECT SUM(amount) AS total_other_costs FROM other_costs WHERE shop_id = ?';
-    const otherParams = [shopId];
+    let otherQuery = 'SELECT SUM(amount) AS total_other_costs FROM other_costs WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
+    const otherParams = hasShop ? [shopId] : [];
     if (start_date && end_date) {
       otherQuery += ' AND cost_date BETWEEN ? AND ?';
       otherParams.push(start_date, end_date);
@@ -64,8 +64,8 @@ router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
     const totalOther = parseFloat(otherRows[0].total_other_costs || 0);
 
     // 5. Calculate Wastage Loss (Cost of Damage/Wastage)
-    let wastageQuery = 'SELECT SUM(cost_loss) AS total_wastage FROM wastages WHERE shop_id = ?';
-    const wastageParams = [shopId];
+    let wastageQuery = 'SELECT SUM(cost_loss) AS total_wastage FROM wastages WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
+    const wastageParams = hasShop ? [shopId] : [];
     if (start_date && end_date) {
       wastageQuery += ' AND adjusted_at BETWEEN ? AND ?';
       wastageParams.push(start_date, end_date);

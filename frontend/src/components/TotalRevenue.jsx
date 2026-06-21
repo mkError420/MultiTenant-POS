@@ -1,15 +1,40 @@
 import React, { useState, useEffect } from 'react';
-
+ 
 const API_BASE_URL = 'http://localhost:5000/api';
-
+ 
 export default function TotalRevenue() {
+  const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = userObj.role === 'super_admin';
+
   const [revenueData, setRevenueData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState('');
 
+  useEffect(() => {
+    if (isSuperAdmin) {
+      const fetchShops = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/shops`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setShops(data);
+          }
+        } catch (err) {
+          console.error('Failed to fetch shops:', err);
+        }
+      };
+      fetchShops();
+    }
+  }, [isSuperAdmin]);
+ 
   const fetchRevenue = async () => {
     setLoading(true);
     setError(null);
@@ -19,11 +44,14 @@ export default function TotalRevenue() {
       const queryParams = [];
       if (startDate) queryParams.push(`start_date=${startDate}`);
       if (endDate) queryParams.push(`end_date=${endDate}`);
+      if (isSuperAdmin && selectedShopId) {
+        queryParams.push(`shop_id=${selectedShopId}`);
+      }
       
       if (queryParams.length > 0) {
         url += `?${queryParams.join('&')}`;
       }
-
+ 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -40,21 +68,21 @@ export default function TotalRevenue() {
       setLoading(false);
     }
   };
-
+ 
   useEffect(() => {
     fetchRevenue();
-  }, [startDate, endDate]);
-
+  }, [startDate, endDate, selectedShopId]);
+ 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
     setTimeout(() => setAlert(null), 4000);
   };
-
+ 
   const formatCurrency = (val) => {
     const numericVal = parseFloat(val || 0);
     return `৳${numericVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
-
+ 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     const parts = dateStr.split('-');
@@ -65,13 +93,13 @@ export default function TotalRevenue() {
     }
     return new Date(dateStr).toLocaleDateString();
   };
-
+ 
   const exportToCSV = () => {
     if (!revenueData) {
       triggerAlert('error', 'No financial data to export.');
       return;
     }
-
+ 
     const headers = ['Financial Indicator', 'Category', 'Description', 'Amount (৳)'];
     const rows = [
       ['Sales Revenue', 'Inflow', 'Gross revenue generated from customer sales transactions', revenueData.sales_revenue.toFixed(2)],
@@ -82,7 +110,7 @@ export default function TotalRevenue() {
       ['Net Profit (Cashflow Basis)', 'Summary', 'Net cashflow liquid profit (Sales - Purchasing Cost - Other Costs - Wastage Loss)', revenueData.net_profit_cashflow.toFixed(2)],
       ['Net Profit (COGS Margin Basis)', 'Summary', 'Net trading margins profit (Sales - COGS - Other Costs - Wastage Loss)', revenueData.net_profit_cogs.toFixed(2)]
     ];
-
+ 
     const csvContent = "\uFEFF" + [
       headers.join(','),
       ...rows.map(e => e.map(val => {
@@ -93,22 +121,24 @@ export default function TotalRevenue() {
         return str;
       }).join(','))
     ].join('\n');
-
+ 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
     
+    const selectedShop = shops.find(s => String(s.id) === String(selectedShopId));
+    const shopNameSlug = selectedShop ? selectedShop.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') : 'all_shops';
     const startStr = startDate ? startDate : 'all-time';
     const endStr = endDate ? endDate : 'all-time';
-    link.setAttribute('download', `financial_report_${startStr}_to_${endStr}.csv`);
+    link.setAttribute('download', `financial_report_${shopNameSlug}_${startStr}_to_${endStr}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     triggerAlert('success', 'Financial report exported successfully!');
   };
-
+ 
   return (
     <div className="space-y-6">
       {/* Alert Alert Banner */}
@@ -119,7 +149,7 @@ export default function TotalRevenue() {
           <span className="text-sm font-semibold">{alert.message}</span>
         </div>
       )}
-
+ 
       {/* Title Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -139,7 +169,7 @@ export default function TotalRevenue() {
           </button>
         </div>
       </div>
-
+ 
       {/* Date Filters Panel */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
         <div className="flex items-center space-x-2 text-slate-600 font-semibold text-sm">
@@ -148,8 +178,26 @@ export default function TotalRevenue() {
           </svg>
           <span>Filter Report Period:</span>
         </div>
-
+ 
         <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
+          {isSuperAdmin && (
+            <div className="flex items-center space-x-2 mr-4">
+              <span className="text-slate-500">Tenant Shop:</span>
+              <select
+                value={selectedShopId}
+                onChange={(e) => setSelectedShopId(e.target.value)}
+                className="border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-700 font-medium"
+              >
+                <option value="">All Shops (Consolidated)</option>
+                {shops.map((shop) => (
+                  <option key={shop.id} value={shop.id}>
+                    {shop.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex items-center space-x-2">
             <span>From:</span>
             <input
@@ -168,9 +216,9 @@ export default function TotalRevenue() {
               className="border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-700"
             />
           </div>
-          {(startDate || endDate) && (
+          {(startDate || endDate || (isSuperAdmin && selectedShopId)) && (
             <button
-              onClick={() => { setStartDate(''); setEndDate(''); }}
+              onClick={() => { setStartDate(''); setEndDate(''); setSelectedShopId(''); }}
               className="text-indigo-600 hover:text-indigo-850 font-bold ml-2 underline"
             >
               Clear Filter
