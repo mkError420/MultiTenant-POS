@@ -28,6 +28,7 @@ const userRoutes = require('./routes/users');
 const shopRoutes = require('./routes/shops');
 const heldBillRoutes = require('./routes/held-bills');
 const otherCostRoutes = require('./routes/other-costs');
+const wastageRoutes = require('./routes/wastage');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -40,6 +41,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/held-bills', heldBillRoutes);
 app.use('/api/other-costs', otherCostRoutes);
+app.use('/api/wastages', wastageRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

@@ -63,9 +63,19 @@ router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
     const [otherRows] = await db.query(otherQuery, otherParams);
     const totalOther = parseFloat(otherRows[0].total_other_costs || 0);
 
+    // 5. Calculate Wastage Loss (Cost of Damage/Wastage)
+    let wastageQuery = 'SELECT SUM(cost_loss) AS total_wastage FROM wastages WHERE shop_id = ?';
+    const wastageParams = [shopId];
+    if (start_date && end_date) {
+      wastageQuery += ' AND adjusted_at BETWEEN ? AND ?';
+      wastageParams.push(start_date, end_date);
+    }
+    const [wastageRows] = await db.query(wastageQuery, wastageParams);
+    const totalWastage = parseFloat(wastageRows[0].total_wastage || 0);
+
     // Calculate Net Profits
-    const netProfitCOGS = totalSales - totalCOGS - totalOther;
-    const netProfitCashflow = totalSales - totalPurchasing - totalOther;
+    const netProfitCOGS = totalSales - totalCOGS - totalOther - totalWastage;
+    const netProfitCashflow = totalSales - totalPurchasing - totalOther - totalWastage;
 
     res.json({
       sales_revenue: totalSales,
@@ -73,6 +83,7 @@ router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
       cost_of_goods_sold: totalCOGS,
       inventory_purchasing_cost: totalPurchasing,
       other_costs: totalOther,
+      wastage_loss: totalWastage,
       net_profit_cogs: netProfitCOGS,
       net_profit_cashflow: netProfitCashflow
     });

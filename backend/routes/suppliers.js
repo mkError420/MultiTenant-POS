@@ -411,26 +411,49 @@ router.put('/purchase-orders/:id/status', authorize(['shop_admin']), async (req,
 router.delete('/purchase-orders/:id', authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
   const poId = req.params.id;
+
+  const conn = await db.getConnection();
   try {
-    const [existing] = await db.query(
+    await conn.beginTransaction();
+
+    const [existing] = await conn.query(
       'SELECT status FROM purchase_orders WHERE id = ? AND shop_id = ?',
       [poId, shopId]
     );
 
     if (existing.length === 0) {
+      await conn.rollback();
       return res.status(404).json({ error: 'Purchase Order not found.' });
     }
 
     const poStatus = existing[0].status;
+
+    // If PO is received, revert product stock counts
     if (poStatus === 'received') {
-      return res.status(400).json({ error: 'Cannot delete a received Purchase Order.' });
+      const [items] = await conn.query(
+        'SELECT product_id, quantity_received FROM purchase_order_items WHERE purchase_order_id = ? AND shop_id = ?',
+        [poId, shopId]
+      );
+
+      for (const item of items) {
+        if (item.quantity_received > 0) {
+          await conn.query(
+            'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ? AND shop_id = ?',
+            [item.quantity_received, item.product_id, shopId]
+          );
+        }
+      }
     }
 
-    await db.query('DELETE FROM purchase_orders WHERE id = ? AND shop_id = ?', [poId, shopId]);
+    await conn.query('DELETE FROM purchase_orders WHERE id = ? AND shop_id = ?', [poId, shopId]);
+    await conn.commit();
     res.json({ message: 'Purchase Order deleted successfully.' });
   } catch (error) {
+    await conn.rollback();
     console.error('Delete PO error:', error);
     res.status(500).json({ error: 'Server error deleting Purchase Order.' });
+  } finally {
+    conn.release();
   }
 });
 

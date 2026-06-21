@@ -488,18 +488,23 @@ export default function Suppliers() {
   };
 
   // DELETE PURCHASE ORDER
-  const handleDeletePo = async (poId) => {
-    if (!window.confirm('Are you sure you want to delete this purchase order draft?')) return;
+  const handleDeletePo = async (po) => {
+    const isReceived = po.status === 'received';
+    const confirmMessage = isReceived
+      ? 'Are you sure you want to delete this RECEIVED purchase order? This will revert product stock quantities added by this order.'
+      : `Are you sure you want to delete this purchase order (${po.status})?`;
+
+    if (!window.confirm(confirmMessage)) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/suppliers/purchase-orders/${poId}`, {
+      const response = await fetch(`${API_BASE_URL}/suppliers/purchase-orders/${po.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const resData = await response.json();
       if (!response.ok) throw new Error(resData.error || 'Failed to delete PO.');
 
-      triggerAlert('success', 'Purchase Order draft deleted successfully.');
+      triggerAlert('success', isReceived ? 'Received Purchase Order deleted and stock reverted!' : 'Purchase Order deleted successfully.');
       fetchPurchaseOrders();
       if (selectedSupplierId) {
         loadProfileData(selectedSupplierId);
@@ -799,21 +804,19 @@ export default function Suppliers() {
                                 </button>
                               )}
                               {po.status === 'draft' && (
-                                <>
-                                  <button
-                                    onClick={() => updatePoStatus(po.id, 'ordered')}
-                                    className="text-amber-600 hover:text-amber-800 font-semibold"
-                                  >
-                                    Place Order
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeletePo(po.id)}
-                                    className="text-rose-600 hover:text-rose-800 font-semibold"
-                                  >
-                                    Delete
-                                  </button>
-                                </>
+                                <button
+                                  onClick={() => updatePoStatus(po.id, 'ordered')}
+                                  className="text-amber-600 hover:text-amber-850 font-semibold mr-3"
+                                >
+                                  Place Order
+                                </button>
                               )}
+                              <button
+                                onClick={() => handleDeletePo(po)}
+                                className="text-rose-600 hover:text-rose-850 font-semibold"
+                              >
+                                Delete
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -1152,21 +1155,19 @@ export default function Suppliers() {
                             </button>
                           )}
                           {po.status === 'draft' && (
-                            <>
-                              <button
-                                onClick={() => updatePoStatus(po.id, 'ordered')}
-                                className="text-amber-600 hover:text-amber-900 font-semibold text-xs border border-amber-100 hover:bg-amber-50 px-2.5 py-1 rounded-lg transition-colors"
-                              >
-                                Place Order
-                              </button>
-                              <button
-                                onClick={() => handleDeletePo(po.id)}
-                                className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors"
-                              >
-                                Delete
-                              </button>
-                            </>
+                            <button
+                              onClick={() => updatePoStatus(po.id, 'ordered')}
+                              className="text-amber-600 hover:text-amber-900 font-semibold text-xs border border-amber-100 hover:bg-amber-50 px-2.5 py-1 rounded-lg transition-colors mr-2"
+                            >
+                              Place Order
+                            </button>
                           )}
+                          <button
+                            onClick={() => handleDeletePo(po)}
+                            className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))

@@ -78,8 +78,9 @@ export default function TotalRevenue() {
       ['Cost of Goods Sold (COGS)', 'Outflow', 'Cost price value of stock sold to customers', revenueData.cost_of_goods_sold.toFixed(2)],
       ['Product Purchasing Cost', 'Outflow', 'Cash outflow for received purchase orders', revenueData.inventory_purchasing_cost.toFixed(2)],
       ['Other Costs', 'Outflow', 'Shop operational costs and miscellaneous overheads', revenueData.other_costs.toFixed(2)],
-      ['Net Profit (Cashflow Basis)', 'Summary', 'Net cashflow liquid profit (Sales - Purchasing Cost - Other Costs)', revenueData.net_profit_cashflow.toFixed(2)],
-      ['Net Profit (COGS Margin Basis)', 'Summary', 'Net trading margins profit (Sales - COGS - Other Costs)', revenueData.net_profit_cogs.toFixed(2)]
+      ['Wastage & Damage Loss', 'Outflow', 'Cost of damaged, expired, or stolen items written off', (revenueData.wastage_loss || 0).toFixed(2)],
+      ['Net Profit (Cashflow Basis)', 'Summary', 'Net cashflow liquid profit (Sales - Purchasing Cost - Other Costs - Wastage Loss)', revenueData.net_profit_cashflow.toFixed(2)],
+      ['Net Profit (COGS Margin Basis)', 'Summary', 'Net trading margins profit (Sales - COGS - Other Costs - Wastage Loss)', revenueData.net_profit_cogs.toFixed(2)]
     ];
 
     const csvContent = "\uFEFF" + [
@@ -198,7 +199,7 @@ export default function TotalRevenue() {
         <div className="space-y-6">
           
           {/* Main KPI Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
             
             {/* Sales Revenue Card */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
@@ -248,6 +249,22 @@ export default function TotalRevenue() {
               </div>
             </div>
 
+            {/* Wastage Loss Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Wastage & Damage Loss</span>
+                <div className="p-2.5 bg-rose-50 text-rose-500 rounded-xl">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="block text-2xl font-black text-slate-800">{formatCurrency(revenueData.wastage_loss || 0)}</span>
+                <span className="text-xs text-slate-450 mt-1 block">Value of stock adjustments/damage</span>
+              </div>
+            </div>
+
             {/* Net Cashflow Profit Card */}
             <div className={`border rounded-2xl p-6 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between ${
               revenueData.net_profit_cashflow >= 0
@@ -266,7 +283,7 @@ export default function TotalRevenue() {
               </div>
               <div className="mt-4">
                 <span className="block text-2xl font-black">{formatCurrency(revenueData.net_profit_cashflow)}</span>
-                <span className="text-xs opacity-75 mt-1 block">Based on liquid cash transaction flows</span>
+                <span className="text-xs opacity-75 mt-1 block">Based on liquid cash transactions</span>
               </div>
             </div>
 
@@ -301,6 +318,10 @@ export default function TotalRevenue() {
                     <span className="text-slate-500">Other Operational Costs:</span>
                     <span className="font-bold text-rose-600">-{formatCurrency(revenueData.other_costs)}</span>
                   </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">Wastage & Damage Loss:</span>
+                    <span className="font-bold text-rose-600">-{formatCurrency(revenueData.wastage_loss || 0)}</span>
+                  </div>
                   
                   <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
                     <span className="text-sm font-bold text-slate-800">Net Profit (Trading):</span>
@@ -315,7 +336,7 @@ export default function TotalRevenue() {
 
               <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-3 text-xs text-slate-500">
                 <span className="font-bold text-slate-700 block mb-0.5">What is COGS Basis?</span>
-                Measures trading profitability by subtracting the *original cost price* of items actually sold, rather than raw purchasing expenditure. Gives you the exact sales margin.
+                Measures trading profitability by subtracting the *original cost price* of items actually sold and wastage write-off value, rather than raw purchasing expenditure. Gives you the exact sales margin.
               </div>
             </div>
 
@@ -345,6 +366,10 @@ export default function TotalRevenue() {
                     <span className="text-slate-500">Other Operational Costs:</span>
                     <span className="font-bold text-rose-600">-{formatCurrency(revenueData.other_costs)}</span>
                   </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">Wastage & Damage Loss:</span>
+                    <span className="font-bold text-rose-600">-{formatCurrency(revenueData.wastage_loss || 0)}</span>
+                  </div>
                   
                   <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
                     <span className="text-sm font-bold text-slate-800">Net Profit (Cashflow):</span>
@@ -359,7 +384,7 @@ export default function TotalRevenue() {
 
               <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-3 text-xs text-slate-500">
                 <span className="font-bold text-slate-700 block mb-0.5">What is Cashflow Basis?</span>
-                Reflects cash flow liquidity by subtracting the actual *buying cost* of all stocked products purchased during this period. Indicates the physical cash status of your shop.
+                Reflects cash flow liquidity by subtracting the actual *buying cost* of all stocked products purchased during this period and wastage write-offs. Indicates the physical cash status of your shop.
               </div>
             </div>
 
@@ -398,7 +423,7 @@ export default function TotalRevenue() {
 
                   {/* Row 2: COGS */}
                   <tr className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 pl-6 font-bold text-slate-800 font-medium">Cost of Goods Sold (COGS)</td>
+                    <td className="p-4 pl-6 font-bold text-slate-800">Cost of Goods Sold (COGS)</td>
                     <td className="p-4">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-655">
                         Inventory Cost (-)
@@ -432,6 +457,18 @@ export default function TotalRevenue() {
                     <td className="p-4 text-right pr-6 font-bold text-rose-600">-{formatCurrency(revenueData.other_costs)}</td>
                   </tr>
 
+                  {/* Row 4.5: Wastage Loss */}
+                  <tr className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 pl-6 font-bold text-slate-800">Wastage & Damage Loss</td>
+                    <td className="p-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-600">
+                        Outflow (-)
+                      </span>
+                    </td>
+                    <td className="p-4 text-slate-500">Recorded value of damaged, expired, or stolen inventory written off</td>
+                    <td className="p-4 text-right pr-6 font-bold text-rose-600">-{formatCurrency(revenueData.wastage_loss || 0)}</td>
+                  </tr>
+
                   {/* Row 5: Net Profit Cashflow */}
                   <tr className="bg-slate-50/40 hover:bg-slate-50 transition-colors border-t border-slate-150">
                     <td className="p-4 pl-6 font-extrabold text-slate-800">Net Profit (Cashflow Basis)</td>
@@ -442,7 +479,7 @@ export default function TotalRevenue() {
                         Net Summary
                       </span>
                     </td>
-                    <td className="p-4 text-slate-500 italic">Liquid cash calculation: Sales Revenue - Buying Cost - Other Costs</td>
+                    <td className="p-4 text-slate-500 italic">Liquid cash calculation: Sales Revenue - Buying Cost - Other Costs - Wastage Loss</td>
                     <td className={`p-4 text-right pr-6 font-black text-base ${
                       revenueData.net_profit_cashflow >= 0 ? 'text-emerald-600' : 'text-rose-600'
                     }`}>
@@ -460,7 +497,7 @@ export default function TotalRevenue() {
                         Net Summary
                       </span>
                     </td>
-                    <td className="p-4 text-slate-500 italic">Trading margins calculation: Sales Revenue - COGS - Other Costs</td>
+                    <td className="p-4 text-slate-500 italic">Trading margins calculation: Sales Revenue - COGS - Other Costs - Wastage Loss</td>
                     <td className={`p-4 text-right pr-6 font-black text-base ${
                       revenueData.net_profit_cogs >= 0 ? 'text-emerald-600' : 'text-rose-600'
                     }`}>

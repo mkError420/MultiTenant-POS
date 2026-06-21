@@ -14,6 +14,7 @@ import SystemUsers from './components/SystemUsers';
 import HeldBills from './components/HeldBills';
 import OtherCost from './components/OtherCost';
 import TotalRevenue from './components/TotalRevenue';
+import Wastage from './components/Wastage';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -192,6 +193,7 @@ export default function App() {
       case '/sales':     return <SalesHistory />;
       case '/other-cost': return <OtherCost />;
       case '/total-revenue': return <TotalRevenue />;
+      case '/wastage': return <Wastage />;
       case '/staff':     return <ManageStaff />;
       case '/settings':  return <Settings />;
       default:           return <Checkout resumedHeldBill={resumedHeldBill} onClearResumedHeldBill={() => setResumedHeldBill(null)} onHeldBillsChange={(count) => setHeldBillsCount(count)} />;
