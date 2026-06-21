@@ -50,7 +50,7 @@ export default function Login({ onLoginSuccess }) {
 
       {/* Login Card */}
       <div className="relative z-10 w-full max-w-md mx-4">
-        
+
         {/* Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600 shadow-2xl shadow-indigo-600/40 mb-4">
@@ -64,7 +64,7 @@ export default function Login({ onLoginSuccess }) {
 
         {/* Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 rounded-2xl p-8 shadow-2xl">
-          
+
           <form onSubmit={handleSubmit} className="space-y-5">
 
             {/* Error Message */}
