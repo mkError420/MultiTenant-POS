@@ -25,35 +25,85 @@ export default function Sidebar({
     switch (role) {
       case 'super_admin':
         return [
-          { label: 'Global Analytics', path: '/dashboard', icon: <DashboardIcon /> },
-          { label: 'Manage Shops', path: '/shops', icon: <ShopsIcon /> },
-          { label: 'System Users', path: '/users', icon: <UsersIcon /> },
-          { label: 'Total Revenue', path: '/total-revenue', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
-          { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+          {
+            section: 'System Administration',
+            items: [
+              { label: 'Global Analytics', path: '/dashboard', icon: <DashboardIcon /> },
+              { label: 'Manage Shops', path: '/shops', icon: <ShopsIcon /> },
+              { label: 'System Users', path: '/users', icon: <UsersIcon /> },
+              { label: 'Total Revenue', path: '/total-revenue', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
+              { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+            ]
+          }
         ];
       case 'shop_admin':
         return [
-          { label: 'Shop Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
-          { label: 'POS Checkout', path: '/checkout', icon: <POSIcon /> },
-          { label: 'Held Bills', path: '/held-bills', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, badge: heldBillsCount },
-          { label: 'Inventory (Products)', path: '/products', icon: <InventoryIcon /> },
-          { label: 'Suppliers', path: '/suppliers', icon: <SuppliersIcon /> },
-          { label: 'Customers', path: '/customers', icon: <UsersIcon /> },
-          { label: 'Sales History', path: '/sales', icon: <ReportsIcon /> },
-          { label: 'Other Cost', path: '/other-cost', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-          { label: 'Wastage', path: '/wastage', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> },
-          { label: 'Total Revenue', path: '/total-revenue', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
-          { label: 'Manage Staff', path: '/staff', icon: <UsersIcon /> },
-          { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+          {
+            section: 'Dashboard',
+            items: [
+              { label: 'Shop Dashboard', path: '/dashboard', icon: <DashboardIcon /> }
+            ]
+          },
+          {
+            section: 'Sales & Billing',
+            items: [
+              { label: 'POS Checkout', path: '/checkout', icon: <POSIcon /> },
+              { label: 'Held Bills', path: '/held-bills', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, badge: heldBillsCount },
+              { label: 'Sales History', path: '/sales', icon: <ReportsIcon /> }
+            ]
+          },
+          {
+            section: 'Inventory & Wastage',
+            items: [
+              { label: 'Inventory (Products)', path: '/products', icon: <InventoryIcon /> },
+              { label: 'Wastage', path: '/wastage', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> }
+            ]
+          },
+          {
+            section: 'Directory',
+            items: [
+              { label: 'Suppliers', path: '/suppliers', icon: <SuppliersIcon /> },
+              { label: 'Customers', path: '/customers', icon: <UsersIcon /> }
+            ]
+          },
+          {
+            section: 'Financials',
+            items: [
+              { label: 'Other Cost', path: '/other-cost', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+              { label: 'Total Revenue', path: '/total-revenue', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> }
+            ]
+          },
+          {
+            section: 'Management',
+            items: [
+              { label: 'Manage Staff', path: '/staff', icon: <UsersIcon /> },
+              { label: 'Settings', path: '/settings', icon: <SettingsIcon /> }
+            ]
+          }
         ];
       case 'shop_staff':
         return [
-          { label: 'POS Checkout', path: '/checkout', icon: <POSIcon /> },
-          { label: 'Held Bills', path: '/held-bills', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, badge: heldBillsCount },
-          { label: 'Inventory check', path: '/products', icon: <InventoryIcon /> },
-          { label: 'Customers', path: '/customers', icon: <UsersIcon /> },
-          { label: 'My Sales Log', path: '/sales', icon: <ReportsIcon /> },
-          { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+          {
+            section: 'Sales & Billing',
+            items: [
+              { label: 'POS Checkout', path: '/checkout', icon: <POSIcon /> },
+              { label: 'Held Bills', path: '/held-bills', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, badge: heldBillsCount },
+              { label: 'My Sales Log', path: '/sales', icon: <ReportsIcon /> }
+            ]
+          },
+          {
+            section: 'Inventory & Directory',
+            items: [
+              { label: 'Inventory check', path: '/products', icon: <InventoryIcon /> },
+              { label: 'Customers', path: '/customers', icon: <UsersIcon /> }
+            ]
+          },
+          {
+            section: 'Preferences',
+            items: [
+              { label: 'Settings', path: '/settings', icon: <SettingsIcon /> }
+            ]
+          }
         ];
       default:
         return [];
@@ -102,35 +152,50 @@ export default function Sidebar({
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = currentPath === item.path;
-            return (
-              <button
-                key={item.label}
-                onClick={() => {
-                  if (onNavigate) onNavigate(item.path);
-                  setSidebarOpen(false); // Auto close mobile drawer on tap
-                }}
-                className={`w-full flex items-center px-3 py-3 rounded-lg font-medium transition-all group text-left ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
-                }`}
-                title={isCollapsed ? item.label : ''}
-              >
-                <div className={`shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}>
-                  {item.icon}
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
+          {navItems.map((sectionObj, idx) => (
+            <div key={sectionObj.section || idx} className="space-y-1">
+              {/* Section Header */}
+              {sectionObj.section && !isCollapsed && (
+                <div className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 mt-2">
+                  {sectionObj.section}
                 </div>
-                {!isCollapsed && <span className="ml-3 truncate">{item.label}</span>}
-                {item.badge !== undefined && item.badge > 0 && !isCollapsed && (
-                  <span className="ml-auto bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+              )}
+              {/* Section divider when collapsed */}
+              {sectionObj.section && isCollapsed && idx > 0 && (
+                <div className="border-t border-slate-800 my-2 mx-3" />
+              )}
+              
+              {sectionObj.items.map((item) => {
+                const isActive = currentPath === item.path;
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      if (onNavigate) onNavigate(item.path);
+                      setSidebarOpen(false); // Auto close mobile drawer on tap
+                    }}
+                    className={`w-full flex items-center px-3 py-2.5 rounded-lg font-medium transition-all group text-left ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+                    }`}
+                    title={isCollapsed ? item.label : ''}
+                  >
+                    <div className={`shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}>
+                      {item.icon}
+                    </div>
+                    {!isCollapsed && <span className="ml-3 truncate text-sm">{item.label}</span>}
+                    {item.badge !== undefined && item.badge > 0 && !isCollapsed && (
+                      <span className="ml-auto bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Desktop Collapse Toggle Footer */}
