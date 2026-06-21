@@ -29,6 +29,7 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [alert, setAlert] = useState(null); // { type: 'success' | 'error', message }
   const [receipt, setReceipt] = useState(null); // Receipts detail storage after checkout
+  const [previewMode, setPreviewMode] = useState('thermal'); // 'thermal' | 'regular'
 
   // Held Bills States
   const [heldBills, setHeldBills] = useState([]);
@@ -363,6 +364,11 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
         throw new Error(data.error || 'Checkout transaction failed.');
       }
 
+      // Calculate paid and outstanding due amounts
+      const finalTotal = getFinalTotal();
+      const paid = paidAmount !== '' ? parseFloat(paidAmount) : finalTotal;
+      const outstandingDue = finalTotal - paid;
+
       // Successful Checkout routine
       setReceipt({
         sale_id: data.sale_id,
@@ -377,8 +383,13 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
         customer_phone: customerPhone.trim() || '',
         customer_address: customerAddress.trim() || '',
         shop_name: currentUser?.shop_name || 'Boutique POS',
+        shop_phone: currentUser?.shop_phone || '',
+        shop_address: currentUser?.shop_address || '',
+        shop_email: currentUser?.shop_email || '',
         staff_name: currentUser?.name || 'Cashier',
-        reduce_due_amount: parseFloat(reduceDueAmount || 0)
+        reduce_due_amount: parseFloat(reduceDueAmount || 0),
+        paid_amount: paid,
+        due_amount: outstandingDue > 0 ? outstandingDue : 0
       });
 
       // Show warnings if inventory items hit low stock limit
@@ -743,89 +754,289 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
         </div>
       )}
 
-      {/* --- RECEIPT MODAL --- */}
+      {/* --- RECEIPT PREVIEW & PRINT MODAL --- */}
       {receipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl overflow-hidden flex flex-col">
-            <div className="text-center pb-4 border-b border-dashed border-slate-200">
-              <h3 className="text-xl font-bold text-slate-800">Receipt</h3>
-              <p className="text-xs text-slate-400 mt-1">Transaction ID: #{receipt.sale_id}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{receipt.created_at}</p>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
             
-            {/* Items table */}
-            <div className="my-4 flex-1 overflow-y-auto max-h-48 divide-y divide-slate-100 pr-1">
-              {receipt.items.map(item => (
-                <div key={item.id} className="py-2 flex justify-between text-xs text-slate-700">
-                  <div>
-                    <span className="font-semibold">{item.name}</span>
-                    <span className="text-slate-400 block">x{item.quantity} @ ৳{item.price}</span>
+            {/* Left Side: Receipt Live Preview Canvas */}
+            <div className="flex-1 bg-slate-100 p-6 flex flex-col items-center justify-center overflow-y-auto min-h-0">
+              <div className="w-full flex justify-between items-center mb-4">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Receipt Preview</span>
+                <span className="text-[10px] bg-slate-200 text-slate-600 font-semibold px-2 py-0.5 rounded-full uppercase">
+                  {previewMode === 'thermal' ? 'Thermal 80mm Roll' : 'Regular A4 Sheet'}
+                </span>
+              </div>
+              
+              <div className="w-full py-4 flex justify-center items-start min-h-0 overflow-y-auto">
+                {previewMode === 'thermal' ? (
+                  /* Thermal Receipt Mockup */
+                  <div className="w-[320px] bg-white text-slate-800 shadow-lg p-6 font-mono text-[11px] leading-relaxed border-t-8 border-indigo-600 rounded-b-md">
+                    <div className="text-center mb-4">
+                      <h2 className="text-sm font-bold tracking-tight uppercase text-slate-950">{receipt.shop_name}</h2>
+                      {receipt.shop_address && <p className="text-[10px] text-slate-500 mt-0.5">{receipt.shop_address}</p>}
+                      {receipt.shop_phone && <p className="text-[10px] text-slate-500">Tel: {receipt.shop_phone}</p>}
+                      {receipt.shop_email && <p className="text-[10px] text-slate-500">Email: {receipt.shop_email}</p>}
+                      <p className="text-[9px] text-slate-400 mt-2 font-sans tracking-widest">*** TRANSACTION RECEIPT ***</p>
+                    </div>
+                    
+                    <div className="border-b border-dashed border-slate-300 py-2 my-2 text-[10px] space-y-0.5 text-slate-600">
+                      <div><span className="font-semibold text-slate-800">Sale ID:</span> #{receipt.sale_id}</div>
+                      <div><span className="font-semibold text-slate-800">Date:</span> {receipt.created_at}</div>
+                      <div><span className="font-semibold text-slate-800">Cashier:</span> {receipt.staff_name}</div>
+                      <div><span className="font-semibold text-slate-800">Customer:</span> {receipt.customer_name}</div>
+                      {receipt.customer_phone && <div><span className="font-semibold text-slate-800">Phone:</span> {receipt.customer_phone}</div>}
+                    </div>
+
+                    <table className="w-full text-left text-[10px] border-collapse">
+                      <thead>
+                        <tr className="border-b border-dashed border-slate-300 font-bold text-slate-700">
+                          <th className="pb-1 text-left">Item</th>
+                          <th className="pb-1 text-center w-12">Qty</th>
+                          <th className="pb-1 text-right w-20">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {receipt.items.map((item, idx) => (
+                          <tr key={idx} className="border-b border-dotted border-slate-100">
+                            <td className="py-2 pr-2 text-slate-800 break-words max-w-[140px]">
+                              <div>{item.name || item.product_name}</div>
+                              <div className="text-[9px] text-slate-400">@ ৳{parseFloat(item.price || item.unit_price).toFixed(2)}</div>
+                            </td>
+                            <td className="py-2 text-center text-slate-600">{item.quantity}</td>
+                            <td className="py-2 text-right font-semibold text-slate-800">
+                              ৳{((item.price || item.unit_price) * item.quantity).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <div className="border-t border-dashed border-slate-300 pt-2.5 mt-2.5 text-[10px] space-y-1.5 text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span className="font-medium text-slate-800">৳{parseFloat(receipt.subtotal).toFixed(2)}</span>
+                      </div>
+                      {parseFloat(receipt.discount || 0) > 0 && (
+                        <div className="flex justify-between text-rose-500">
+                          <span>Discount:</span>
+                          <span>-৳{parseFloat(receipt.discount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>Tax:</span>
+                        <span className="font-medium text-slate-800">৳{parseFloat(receipt.tax).toFixed(2)}</span>
+                      </div>
+                      {parseFloat(receipt.reduce_due_amount || 0) > 0 && (
+                        <div className="flex justify-between text-indigo-600 font-medium">
+                          <span>Due Paid:</span>
+                          <span>৳{parseFloat(receipt.reduce_due_amount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-slate-900 border-t border-dotted border-slate-200 pt-1.5 text-[12px]">
+                        <span>Total Paid:</span>
+                        <span>৳{parseFloat(receipt.total).toFixed(2)}</span>
+                      </div>
+                      {parseFloat(receipt.due_amount || 0) > 0 && (
+                        <div className="flex justify-between font-bold text-rose-600 border-t border-dotted border-slate-200 pt-1 text-[11px]">
+                          <span>Outstanding Due:</span>
+                          <span>৳{parseFloat(receipt.due_amount).toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-center mt-6 pt-3 border-t border-dashed border-slate-300">
+                      <p className="text-[10px] text-slate-600 uppercase font-semibold">Payment: {receipt.payment_method.replace('_', ' ')}</p>
+                      <p className="text-[10px] font-bold text-slate-800 tracking-wider mt-2">*** THANK YOU ***</p>
+                    </div>
                   </div>
-                  <span className="font-bold">৳{(item.price * item.quantity).toFixed(2)}</span>
-                </div>
-              ))}
+                ) : (
+                  /* Regular A4 Sheet Mockup */
+                  <div className="w-full max-w-[620px] bg-white text-slate-800 shadow-lg p-8 font-sans text-[11px] leading-relaxed border-t-8 border-indigo-600 rounded-b-md">
+                    <div className="flex justify-between items-start border-b border-slate-200 pb-4 mb-4">
+                      <div>
+                        <h1 className="text-lg font-extrabold text-slate-900 tracking-tight">{receipt.shop_name}</h1>
+                        {receipt.shop_address && <p className="text-slate-500 mt-1 text-[10px]">{receipt.shop_address}</p>}
+                        <div className="text-slate-400 mt-0.5 text-[9px] space-x-2">
+                          {receipt.shop_phone && <span>Tel: {receipt.shop_phone}</span>}
+                          {receipt.shop_email && <span>Email: {receipt.shop_email}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <h2 className="text-sm font-black text-indigo-600 tracking-widest uppercase">INVOICE</h2>
+                        <p className="text-slate-500 mt-1 text-[10px]">Invoice ID: <span className="font-semibold text-slate-800">#{receipt.sale_id}</span></p>
+                        <p className="text-slate-400 text-[9px]">{receipt.created_at}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg mb-4 text-[10px]">
+                      <div>
+                        <h3 className="text-[8px] font-bold uppercase tracking-wider text-slate-400 mb-1">Billed To</h3>
+                        <div className="font-bold text-slate-800">{receipt.customer_name}</div>
+                        {receipt.customer_phone && <p className="text-slate-600 mt-0.5">Phone: {receipt.customer_phone}</p>}
+                        {receipt.customer_address && <p className="text-slate-600">Address: {receipt.customer_address}</p>}
+                      </div>
+                      <div>
+                        <h3 className="text-[8px] font-bold uppercase tracking-wider text-slate-400 mb-1">Billed By</h3>
+                        <div className="font-bold text-slate-800">{receipt.shop_name}</div>
+                        <p className="text-slate-600 mt-0.5">Cashier: {receipt.staff_name}</p>
+                        <p className="text-slate-600">Payment: <span className="uppercase text-[9px] font-bold text-slate-700 bg-slate-200 px-1.5 py-0.5 rounded">{receipt.payment_method.replace('_', ' ')}</span></p>
+                      </div>
+                    </div>
+
+                    <table className="w-full text-left border-collapse text-[10px]">
+                      <thead>
+                        <tr className="border-b-2 border-slate-200 text-[9px] uppercase font-bold text-slate-500">
+                          <th className="pb-2 text-left">Item Description</th>
+                          <th className="pb-2 text-center w-16">SKU</th>
+                          <th className="pb-2 text-center w-12">Qty</th>
+                          <th className="pb-2 text-right w-20">Unit Price</th>
+                          <th className="pb-2 text-right w-20">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {receipt.items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="py-2.5 font-semibold text-slate-800">{item.name || item.product_name}</td>
+                            <td className="py-2.5 text-center text-slate-400 text-[9px] font-mono">{item.sku || item.product_sku || 'N/A'}</td>
+                            <td className="py-2.5 text-center text-slate-600 font-medium">{item.quantity}</td>
+                            <td className="py-2.5 text-right text-slate-600">৳{parseFloat(item.price || item.unit_price).toFixed(2)}</td>
+                            <td className="py-2.5 text-right font-bold text-slate-900">
+                              ৳{((item.price || item.unit_price) * item.quantity).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <div className="flex justify-end mt-4 border-t border-slate-100 pt-3">
+                      <div className="w-56 space-y-1.5 text-slate-600 text-[10px]">
+                        <div className="flex justify-between">
+                          <span>Subtotal:</span>
+                          <span className="font-semibold text-slate-800">৳{parseFloat(receipt.subtotal).toFixed(2)}</span>
+                        </div>
+                        {parseFloat(receipt.discount || 0) > 0 && (
+                          <div className="flex justify-between text-rose-500">
+                            <span>Discount:</span>
+                            <span>-৳{parseFloat(receipt.discount).toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span>Tax:</span>
+                          <span className="font-semibold text-slate-800">৳{parseFloat(receipt.tax).toFixed(2)}</span>
+                        </div>
+                        {parseFloat(receipt.reduce_due_amount || 0) > 0 && (
+                          <div className="flex justify-between text-indigo-600 font-semibold">
+                            <span>Due Paid:</span>
+                            <span>৳{parseFloat(receipt.reduce_due_amount).toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-black text-indigo-600 border-t border-slate-250 pt-1.5 text-xs">
+                          <span>Total Paid:</span>
+                          <span>৳{parseFloat(receipt.total).toFixed(2)}</span>
+                        </div>
+                        {parseFloat(receipt.due_amount || 0) > 0 && (
+                          <div className="flex justify-between font-bold text-rose-600 border-t border-slate-200 pt-1">
+                            <span>Outstanding Due:</span>
+                            <span>৳{parseFloat(receipt.due_amount).toFixed(2)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-center mt-8 pt-3 border-t border-slate-100 text-slate-400 text-[9px]">
+                      <p>Thank you for shopping with us! Please contact us for any inquiries.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Financials totals */}
-            <div className="border-t border-dashed border-slate-200 pt-3 space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Subtotal:</span>
-                <span>৳{receipt.subtotal.toFixed(2)}</span>
-              </div>
-              {receipt.discount > 0 && (
-                <div className="flex justify-between text-rose-500">
-                  <span>Discount ({((receipt.discount / receipt.subtotal) * 100).toFixed(1).replace(/\.0$/, '')}%):</span>
-                  <span>-৳{receipt.discount.toFixed(2)}</span>
+            {/* Right Side: Options & Actions Control Panel */}
+            <div className="w-full md:w-80 flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-100 p-6 bg-slate-50">
+              <div>
+                <div className="flex items-center space-x-2 text-emerald-600 mb-4">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-bold tracking-tight">Checkout Completed</span>
                 </div>
-              )}
-              <div className="flex justify-between text-slate-500">
-                <span>Tax ({(taxRate * 100).toString()}%):</span>
-                <span>৳{receipt.tax.toFixed(2)}</span>
-              </div>
-              {receipt.reduce_due_amount > 0 && (
-                <div className="flex justify-between text-indigo-600 font-semibold">
-                  <span>Due Balance Paid:</span>
-                  <span>৳{receipt.reduce_due_amount.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-lg font-bold text-slate-800 border-t border-slate-100 pt-2">
-                <span>Total Paid:</span>
-                <span className="text-indigo-600">৳{parseFloat(receipt.total).toFixed(2)}</span>
-              </div>
-              <div className="text-center pt-2 text-[10px] text-slate-400">
-                Paid via {receipt.payment_method.toUpperCase()}
-              </div>
-            </div>
+                
+                <h3 className="text-lg font-extrabold text-slate-800">Print Receipt</h3>
+                <p className="text-xs text-slate-500 mt-1">Transaction recorded successfully. Preview and choose formatting layout below:</p>
 
-            {/* Actions buttons for Print layouts */}
-            <div className="mt-6 space-y-2">
-              <div className="flex space-x-2">
+                {/* Print Layout Selector */}
+                <div className="mt-5 space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Receipt Format</span>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('thermal')}
+                      className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+                        previewMode === 'thermal' 
+                          ? 'bg-white text-indigo-700 shadow-sm' 
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/50'
+                      }`}
+                    >
+                      Thermal (80mm)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('regular')}
+                      className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+                        previewMode === 'regular' 
+                          ? 'bg-white text-indigo-700 shadow-sm' 
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/50'
+                      }`}
+                    >
+                      Regular (A4)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Summary Metadata Card */}
+                <div className="mt-6 bg-white border border-slate-200/80 rounded-xl p-3.5 space-y-2.5 text-xs">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Transaction ID:</span>
+                    <span className="font-semibold text-slate-700">#{receipt.sale_id}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>Payment Method:</span>
+                    <span className="font-semibold text-slate-700 uppercase">{receipt.payment_method}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-500 border-t border-slate-100 pt-2 mt-2">
+                    <span>Total Paid:</span>
+                    <span className="font-bold text-indigo-600">৳{parseFloat(receipt.total).toFixed(2)}</span>
+                  </div>
+                  {receipt.due_amount > 0 && (
+                    <div className="flex justify-between text-rose-500 font-semibold">
+                      <span>Outstanding Due:</span>
+                      <span>৳{parseFloat(receipt.due_amount).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="mt-8 space-y-2">
                 <button
-                  onClick={() => handlePrint('thermal')}
-                  className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center space-x-1.5"
+                  onClick={() => handlePrint(previewMode)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center justify-center space-x-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                   </svg>
-                  <span>Thermal (80mm)</span>
+                  <span>Print {previewMode === 'thermal' ? 'Thermal' : 'Regular A4'}</span>
                 </button>
                 <button
-                  onClick={() => handlePrint('regular')}
-                  className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center space-x-1.5"
+                  onClick={() => setReceipt(null)}
+                  className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 rounded-xl text-sm transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>Regular (A4)</span>
+                  Done
                 </button>
               </div>
-              <button
-                onClick={() => setReceipt(null)}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow"
-              >
-                Done
-              </button>
             </div>
+
           </div>
         </div>
       )}
@@ -837,32 +1048,39 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
           <div className="thermal-only">
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
               <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 2px 0' }}>{receipt.shop_name}</h2>
-              <p style={{ margin: '0 0 2px 0', fontSize: '9px' }}>POS Transaction Invoice</p>
-              <p style={{ margin: '0', fontSize: '9px' }}>Cashier: {receipt.staff_name}</p>
+              {receipt.shop_address && <p style={{ margin: '0 0 2px 0', fontSize: '9px' }}>{receipt.shop_address}</p>}
+              <div style={{ fontSize: '9px', margin: '0 0 4px 0' }}>
+                {receipt.shop_phone && <span style={{ marginRight: '6px' }}>Tel: {receipt.shop_phone}</span>}
+                {receipt.shop_email && <span>Email: {receipt.shop_email}</span>}
+              </div>
+              <p style={{ margin: '4px 0 0 0', fontSize: '9px', fontWeight: 'bold', letterSpacing: '0.05em' }}>*** TRANSACTION RECEIPT ***</p>
             </div>
             
             <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '4px 0', margin: '8px 0', fontSize: '9px', lineHeight: '1.3' }}>
               <div><strong>Sale ID:</strong> #{receipt.sale_id}</div>
               <div><strong>Date:</strong> {receipt.created_at}</div>
+              <div><strong>Cashier:</strong> {receipt.staff_name}</div>
               <div><strong>Customer:</strong> {receipt.customer_name}</div>
               {receipt.customer_phone && <div><strong>Phone:</strong> {receipt.customer_phone}</div>}
-              {receipt.customer_address && <div><strong>Address:</strong> {receipt.customer_address}</div>}
             </div>
 
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', margin: '8px 0' }}>
               <thead>
                 <tr style={{ borderBottom: '1px dashed #000' }}>
                   <th style={{ textAlign: 'left', paddingBottom: '3px' }}>Item</th>
-                  <th style={{ textAlign: 'center', paddingBottom: '3px' }}>Qty</th>
-                  <th style={{ textAlign: 'right', paddingBottom: '3px' }}>Total</th>
+                  <th style={{ textAlign: 'center', paddingBottom: '3px', width: '30px' }}>Qty</th>
+                  <th style={{ textAlign: 'right', paddingBottom: '3px', width: '60px' }}>Total</th>
                 </tr>
               </thead>
               <tbody>
-                {receipt.items.map((item) => (
-                  <tr key={item.id}>
-                    <td style={{ paddingTop: '3px', maxWidth: '140px', wordBreak: 'break-all' }}>{item.name}</td>
+                {receipt.items.map((item, idx) => (
+                  <tr key={idx}>
+                    <td style={{ paddingTop: '3px', maxWidth: '140px', wordBreak: 'break-all' }}>
+                      {item.name || item.product_name}
+                      <span style={{ display: 'block', fontSize: '8px', color: '#666' }}>@ ৳{parseFloat(item.price || item.unit_price).toFixed(2)}</span>
+                    </td>
                     <td style={{ textAlign: 'center', paddingTop: '3px' }}>{item.quantity}</td>
-                    <td style={{ textAlign: 'right', paddingTop: '3px' }}>৳{(item.price * item.quantity).toFixed(2)}</td>
+                    <td style={{ textAlign: 'right', paddingTop: '3px' }}>৳{((item.price || item.unit_price) * item.quantity).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -873,26 +1091,32 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
                 <span>Subtotal:</span>
                 <span>৳{receipt.subtotal.toFixed(2)}</span>
               </div>
-              {receipt.discount > 0 && (
+              {parseFloat(receipt.discount || 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Discount ({((receipt.discount / receipt.subtotal) * 100).toFixed(1).replace(/\.0$/, '')}%):</span>
-                  <span>-৳{receipt.discount.toFixed(2)}</span>
+                  <span>Discount:</span>
+                  <span>-৳{parseFloat(receipt.discount).toFixed(2)}</span>
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Tax ({(taxRate * 100).toString()}%):</span>
                 <span>৳{receipt.tax.toFixed(2)}</span>
               </div>
-              {receipt.reduce_due_amount > 0 && (
+              {parseFloat(receipt.reduce_due_amount || 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
                   <span>Due Paid:</span>
-                  <span>৳{receipt.reduce_due_amount.toFixed(2)}</span>
+                  <span>৳{parseFloat(receipt.reduce_due_amount).toFixed(2)}</span>
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '3px', marginTop: '3px' }}>
                 <span>Total Paid:</span>
                 <span>৳{parseFloat(receipt.total).toFixed(2)}</span>
               </div>
+              {parseFloat(receipt.due_amount || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: 'bold', color: '#ef4444', borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '2px' }}>
+                  <span>Outstanding Due:</span>
+                  <span>৳{parseFloat(receipt.due_amount).toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '9px' }}>
@@ -906,8 +1130,11 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '16px' }}>
               <div>
                 <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 4px 0' }}>{receipt.shop_name}</h1>
-                <p style={{ margin: '0 0 2px 0', color: '#64748b' }}>Store Invoice Receipt</p>
-                <p style={{ margin: '0', color: '#64748b', fontSize: '12px' }}>Email: contact@{receipt.shop_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com</p>
+                {receipt.shop_address && <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '12px' }}>{receipt.shop_address}</p>}
+                <div style={{ color: '#64748b', fontSize: '12px', marginTop: '2px' }}>
+                  {receipt.shop_phone && <span style={{ marginRight: '10px' }}>Tel: {receipt.shop_phone}</span>}
+                  {receipt.shop_email && <span>Email: {receipt.shop_email}</span>}
+                </div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#6366f1', margin: '0 0 4px 0' }}>INVOICE</h2>
@@ -935,20 +1162,20 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
               <thead>
                 <tr style={{ borderBottom: '2px solid #cbd5e1', color: '#475569', fontSize: '11px', textTransform: 'uppercase', fontWeight: 'bold', textAlign: 'left' }}>
                   <th style={{ padding: '8px 0' }}>Item Description</th>
-                  <th style={{ padding: '8px 0', textAlign: 'center' }}>SKU</th>
-                  <th style={{ padding: '8px 0', textAlign: 'center' }}>Qty</th>
-                  <th style={{ padding: '8px 0', textAlign: 'right' }}>Unit Price</th>
-                  <th style={{ padding: '8px 0', textAlign: 'right' }}>Total</th>
+                  <th style={{ padding: '8px 0', textAlign: 'center', width: '100px' }}>SKU</th>
+                  <th style={{ padding: '8px 0', textAlign: 'center', width: '60px' }}>Qty</th>
+                  <th style={{ padding: '8px 0', textAlign: 'right', width: '100px' }}>Unit Price</th>
+                  <th style={{ padding: '8px 0', textAlign: 'right', width: '100px' }}>Total</th>
                 </tr>
               </thead>
               <tbody style={{ fontSize: '13px', color: '#334155' }}>
-                {receipt.items.map((item) => (
-                  <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 0', fontWeight: '500' }}>{item.name}</td>
-                    <td style={{ padding: '10px 0', textAlign: 'center', color: '#64748b' }}>{item.sku}</td>
+                {receipt.items.map((item, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 0', fontWeight: '500' }}>{item.name || item.product_name}</td>
+                    <td style={{ padding: '10px 0', textAlign: 'center', color: '#64748b' }}>{item.sku || item.product_sku || 'N/A'}</td>
                     <td style={{ padding: '10px 0', textAlign: 'center' }}>{item.quantity}</td>
-                    <td style={{ padding: '10px 0', textAlign: 'right' }}>৳{parseFloat(item.price).toFixed(2)}</td>
-                    <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 'bold' }}>৳{(item.price * item.quantity).toFixed(2)}</td>
+                    <td style={{ padding: '10px 0', textAlign: 'right' }}>৳{parseFloat(item.price || item.unit_price).toFixed(2)}</td>
+                    <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 'bold' }}>৳{((item.price || item.unit_price) * item.quantity).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -960,26 +1187,32 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
                   <span>Subtotal</span>
                   <span style={{ fontWeight: '600', color: '#1e293b' }}>৳{receipt.subtotal.toFixed(2)}</span>
                 </div>
-                {receipt.discount > 0 && (
+                {parseFloat(receipt.discount || 0) > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#ef4444' }}>
-                    <span>Discount ({((receipt.discount / receipt.subtotal) * 100).toFixed(1).replace(/\.0$/, '')}%)</span>
-                    <span>-৳{receipt.discount.toFixed(2)}</span>
+                    <span>Discount</span>
+                    <span>-৳{parseFloat(receipt.discount).toFixed(2)}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#64748b' }}>
                   <span>Tax ({(taxRate * 100).toString()}%)</span>
                   <span style={{ fontWeight: '600', color: '#1e293b' }}>৳{receipt.tax.toFixed(2)}</span>
                 </div>
-                {receipt.reduce_due_amount > 0 && (
+                {parseFloat(receipt.reduce_due_amount || 0) > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#4f46e5', fontWeight: 'bold' }}>
                     <span>Due Balance Paid</span>
-                    <span>৳{receipt.reduce_due_amount.toFixed(2)}</span>
+                    <span>৳{parseFloat(receipt.reduce_due_amount).toFixed(2)}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: '15px', fontWeight: 'bold', borderTop: '2px solid #e2e8f0', marginTop: '6px' }}>
-                  <span>Total Amount</span>
+                  <span>Total Paid</span>
                   <span style={{ color: '#6366f1' }}>৳{parseFloat(receipt.total).toFixed(2)}</span>
                 </div>
+                {parseFloat(receipt.due_amount || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#ef4444', fontWeight: 'bold', borderTop: '1px solid #e2e8f0', marginTop: '4px' }}>
+                    <span>Outstanding Due</span>
+                    <span>৳{parseFloat(receipt.due_amount).toFixed(2)}</span>
+                  </div>
+                )}
               </div>
             </div>
 

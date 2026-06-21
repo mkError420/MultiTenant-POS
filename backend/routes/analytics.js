@@ -7,6 +7,82 @@ const router = express.Router();
 router.use(authenticate);
 
 /**
+ * @route   GET /api/analytics/revenue
+ * @desc    Fetch revenue breakdown: sales revenue, product buying costs, other costs, net profits
+ * @access  Private (shop_admin)
+ */
+router.get('/revenue', authorize(['shop_admin']), async (req, res) => {
+  const shopId = req.shopId;
+  const { start_date, end_date } = req.query;
+
+  try {
+    // 1. Calculate Sales Revenue
+    let salesQuery = 'SELECT SUM(final_amount) AS total_sales, COUNT(id) AS sales_count FROM sales WHERE shop_id = ?';
+    const salesParams = [shopId];
+    if (start_date && end_date) {
+      salesQuery += ' AND created_at BETWEEN ? AND ?';
+      salesParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+    }
+    const [salesRows] = await db.query(salesQuery, salesParams);
+    const totalSales = parseFloat(salesRows[0].total_sales || 0);
+    const salesCount = parseInt(salesRows[0].sales_count || 0);
+
+    // 2. Calculate Cost of Goods Sold (COGS) based on actual sales items and cost price of products
+    let cogsQuery = `
+      SELECT SUM(si.quantity * p.cost_price) AS cogs 
+      FROM sale_items si 
+      JOIN products p ON si.product_id = p.id
+      JOIN sales s ON si.sale_id = s.id
+      WHERE si.shop_id = ?
+    `;
+    const cogsParams = [shopId];
+    if (start_date && end_date) {
+      cogsQuery += ' AND s.created_at BETWEEN ? AND ?';
+      cogsParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+    }
+    const [cogsRows] = await db.query(cogsQuery, cogsParams);
+    const totalCOGS = parseFloat(cogsRows[0].cogs || 0);
+
+    // 3. Calculate Product Purchasing Costs (Received POs)
+    let poQuery = "SELECT SUM(total_amount) AS total_purchased FROM purchase_orders WHERE shop_id = ? AND status = 'received'";
+    const poParams = [shopId];
+    if (start_date && end_date) {
+      poQuery += ' AND received_date BETWEEN ? AND ?';
+      poParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+    }
+    const [poRows] = await db.query(poQuery, poParams);
+    const totalPurchasing = parseFloat(poRows[0].total_purchased || 0);
+
+    // 4. Calculate Other Costs
+    let otherQuery = 'SELECT SUM(amount) AS total_other_costs FROM other_costs WHERE shop_id = ?';
+    const otherParams = [shopId];
+    if (start_date && end_date) {
+      otherQuery += ' AND cost_date BETWEEN ? AND ?';
+      otherParams.push(start_date, end_date);
+    }
+    const [otherRows] = await db.query(otherQuery, otherParams);
+    const totalOther = parseFloat(otherRows[0].total_other_costs || 0);
+
+    // Calculate Net Profits
+    const netProfitCOGS = totalSales - totalCOGS - totalOther;
+    const netProfitCashflow = totalSales - totalPurchasing - totalOther;
+
+    res.json({
+      sales_revenue: totalSales,
+      sales_count: salesCount,
+      cost_of_goods_sold: totalCOGS,
+      inventory_purchasing_cost: totalPurchasing,
+      other_costs: totalOther,
+      net_profit_cogs: netProfitCOGS,
+      net_profit_cashflow: netProfitCashflow
+    });
+  } catch (error) {
+    console.error('Revenue breakdown error:', error);
+    res.status(500).json({ error: 'Server error generating revenue analytics.' });
+  }
+});
+
+/**
  * @route   GET /api/analytics
  * @desc    Fetch analytics dashboard data.
  *          Super Admin: Global overview (total shops, global revenue, active users).

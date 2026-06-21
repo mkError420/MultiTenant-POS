@@ -150,8 +150,8 @@ router.get('/:id/history', async (req, res) => {
         p.name AS product_name,
         p.sku AS product_sku
       FROM sales s
-      JOIN sale_items si ON s.id = si.sale_id
-      JOIN products p ON si.product_id = p.id
+      LEFT JOIN sale_items si ON s.id = si.sale_id
+      LEFT JOIN products p ON si.product_id = p.id
       WHERE s.customer_id = ? AND s.shop_id = ?
       ORDER BY s.created_at DESC`,
       [customerId, shopId]
@@ -173,14 +173,17 @@ router.get('/:id/history', async (req, res) => {
           items: []
         };
       }
-      salesMap[row.sale_id].items.push({
-        item_id: row.item_id,
-        product_name: row.product_name,
-        product_sku: row.product_sku,
-        quantity: row.quantity,
-        unit_price: row.unit_price,
-        subtotal: row.subtotal
-      });
+      // Only add item if the JOIN found a matching sale_item row
+      if (row.item_id) {
+        salesMap[row.sale_id].items.push({
+          item_id: row.item_id,
+          product_name: row.product_name,
+          product_sku: row.product_sku,
+          quantity: row.quantity,
+          unit_price: row.unit_price,
+          subtotal: row.subtotal
+        });
+      }
     });
 
     res.json(Object.values(salesMap));

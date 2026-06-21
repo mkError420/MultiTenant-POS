@@ -4,9 +4,11 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function Inventory() {
   const [products, setProducts] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [lowStockFilter, setLowStockFilter] = useState(false);
+  const [expiryFilter, setExpiryFilter] = useState(false);
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
 
@@ -22,7 +24,9 @@ export default function Inventory() {
     price: '',
     cost_price: '',
     stock_quantity: '',
-    low_stock_threshold: '10'
+    low_stock_threshold: '10',
+    expiry_date: '',
+    supplier_id: ''
   });
 
   const fetchProducts = async () => {
@@ -31,6 +35,8 @@ export default function Inventory() {
       const token = localStorage.getItem('token');
       const url = `${API_BASE_URL}/products?search=${encodeURIComponent(search)}${
         lowStockFilter ? '&low_stock=true' : ''
+      }${
+        expiryFilter ? '&expiring=true' : ''
       }`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -45,9 +51,27 @@ export default function Inventory() {
     }
   };
 
+  const fetchSuppliers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/suppliers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        setSuppliers(await response.json());
+      }
+    } catch (err) {
+      console.error('Error fetching suppliers:', err);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
-  }, [search, lowStockFilter]);
+  }, [search, lowStockFilter, expiryFilter]);
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
@@ -79,7 +103,9 @@ export default function Inventory() {
           price: parseFloat(formData.price),
           cost_price: parseFloat(formData.cost_price),
           stock_quantity: parseInt(formData.stock_quantity || 0),
-          low_stock_threshold: parseInt(formData.low_stock_threshold || 10)
+          low_stock_threshold: parseInt(formData.low_stock_threshold || 10),
+          expiry_date: formData.expiry_date || null,
+          supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null
         })
       });
 
@@ -104,7 +130,9 @@ export default function Inventory() {
       price: product.price,
       cost_price: product.cost_price,
       stock_quantity: product.stock_quantity,
-      low_stock_threshold: product.low_stock_threshold
+      low_stock_threshold: product.low_stock_threshold,
+      expiry_date: product.expiry_date ? product.expiry_date.split('T')[0] : '',
+      supplier_id: product.supplier_id || ''
     });
     setShowEditModal(true);
   };
@@ -125,7 +153,9 @@ export default function Inventory() {
           price: parseFloat(formData.price),
           cost_price: parseFloat(formData.cost_price),
           stock_quantity: parseInt(formData.stock_quantity),
-          low_stock_threshold: parseInt(formData.low_stock_threshold)
+          low_stock_threshold: parseInt(formData.low_stock_threshold),
+          expiry_date: formData.expiry_date || null,
+          supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null
         })
       });
 
@@ -167,9 +197,56 @@ export default function Inventory() {
       price: '',
       cost_price: '',
       stock_quantity: '',
-      low_stock_threshold: '10'
+      low_stock_threshold: '10',
+      expiry_date: '',
+      supplier_id: ''
     });
     setCurrentProduct(null);
+  };
+
+  const exportToCSV = () => {
+    if (products.length === 0) {
+      triggerAlert('error', 'No products to export.');
+      return;
+    }
+
+    const headers = ['ID', 'Name', 'SKU', 'Cost Price', 'Sale Price', 'Stock Quantity', 'Low Stock Threshold', 'Expiry Date'];
+    
+    const escapeCSV = (val) => {
+      if (val === null || val === undefined) return '';
+      let str = String(val);
+      if (/[",\n\r]/.test(str)) {
+        str = `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const rows = products.map(p => [
+      p.id,
+      escapeCSV(p.name),
+      escapeCSV(p.sku),
+      parseFloat(p.cost_price).toFixed(2),
+      parseFloat(p.price).toFixed(2),
+      p.stock_quantity,
+      p.low_stock_threshold,
+      p.expiry_date ? p.expiry_date.split('T')[0] : 'N/A'
+    ]);
+
+    const csvContent = "\uFEFF" + [
+      headers.join(','),
+      ...rows.map(e => e.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `inventory_catalog_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    triggerAlert('success', 'Catalog exported successfully!');
   };
 
   return (
@@ -185,20 +262,31 @@ export default function Inventory() {
       )}
 
       {/* Title Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Inventory Catalog</h2>
           <p className="text-sm text-slate-500">Manage shop items, monitor levels, and set restock alerts</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowAddModal(true); }}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow transition-colors flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Add New Product</span>
-        </button>
+        <div className="flex items-center space-x-3 w-full sm:w-auto">
+          <button
+            onClick={exportToCSV}
+            className="bg-white hover:bg-slate-50 text-slate-700 font-semibold py-2.5 px-5 border border-slate-200 rounded-xl text-sm shadow-xs transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Export Catalog</span>
+          </button>
+          <button
+            onClick={() => { resetForm(); setShowAddModal(true); }}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Add New Product</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -218,16 +306,30 @@ export default function Inventory() {
           </svg>
         </div>
 
-        {/* Low Stock Checkbox Filter */}
-        <label className="flex items-center space-x-2.5 cursor-pointer text-sm font-semibold text-slate-600">
-          <input
-            type="checkbox"
-            checked={lowStockFilter}
-            onChange={(e) => setLowStockFilter(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          <span>Show Low Stock Warnings Only</span>
-        </label>
+        {/* Filters Group */}
+        <div className="flex flex-wrap items-center gap-4 md:gap-6">
+          {/* Low Stock Checkbox Filter */}
+          <label className="flex items-center space-x-2.5 cursor-pointer text-sm font-semibold text-slate-600">
+            <input
+              type="checkbox"
+              checked={lowStockFilter}
+              onChange={(e) => setLowStockFilter(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span>Show Low Stock Warnings Only</span>
+          </label>
+
+          {/* Expiry Checkbox Filter */}
+          <label className="flex items-center space-x-2.5 cursor-pointer text-sm font-semibold text-slate-600">
+            <input
+              type="checkbox"
+              checked={expiryFilter}
+              onChange={(e) => setExpiryFilter(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span>Show Expired / Expiring Soon Only</span>
+          </label>
+        </div>
       </div>
 
       {/* Inventory Table Container */}
@@ -238,16 +340,18 @@ export default function Inventory() {
               <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
                 <th className="p-4">SKU</th>
                 <th className="p-4">Product Name</th>
+                <th className="p-4">Supplier</th>
                 <th className="p-4">Cost Price</th>
                 <th className="p-4">Sale Price</th>
                 <th className="p-4">Stock</th>
+                <th className="p-4">Expiry</th>
                 <th className="p-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="p-12 text-center">
+                  <td colSpan="8" className="p-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
                     </div>
@@ -255,17 +359,55 @@ export default function Inventory() {
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-12 text-center text-slate-400">
+                  <td colSpan="8" className="p-12 text-center text-slate-400">
                     No products matched current search filters.
                   </td>
                 </tr>
               ) : (
                 products.map((product) => {
                   const isLowStock = product.stock_quantity <= product.low_stock_threshold;
+                  
+                  // Expiry status calculation
+                  let expiryBadge = null;
+                  if (product.expiry_date) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const expiry = new Date(product.expiry_date);
+                    expiry.setHours(0, 0, 0, 0);
+                    const isExpired = expiry.getTime() < today.getTime();
+                    const diffTime = expiry.getTime() - today.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    if (isExpired) {
+                      expiryBadge = (
+                        <span className="bg-rose-50 text-rose-600 border border-rose-100 px-2.5 py-0.5 rounded text-xs font-bold inline-flex items-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5 animate-pulse"></span>
+                          Expired ({expiry.toLocaleDateString()})
+                        </span>
+                      );
+                    } else if (diffDays <= 30) {
+                      expiryBadge = (
+                        <span className="bg-amber-50 text-amber-600 border border-amber-100 px-2.5 py-0.5 rounded text-xs font-bold inline-flex items-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-ping"></span>
+                          Expiring in {diffDays}d ({expiry.toLocaleDateString()})
+                        </span>
+                      );
+                    } else {
+                      expiryBadge = (
+                        <span className="bg-slate-50 text-slate-650 border border-slate-200 px-2.5 py-0.5 rounded text-xs font-semibold">
+                          {expiry.toLocaleDateString()}
+                        </span>
+                      );
+                    }
+                  } else {
+                    expiryBadge = <span className="text-slate-400 text-xs">N/A</span>;
+                  }
+
                   return (
                     <tr key={product.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4 font-mono text-xs font-bold text-slate-500">{product.sku}</td>
                       <td className="p-4 font-semibold text-slate-800">{product.name}</td>
+                      <td className="p-4 text-slate-700 font-medium">{product.supplier_name || 'N/A'}</td>
                       <td className="p-4 text-slate-600">৳{parseFloat(product.cost_price).toFixed(2)}</td>
                       <td className="p-4 font-extrabold text-slate-800">৳{parseFloat(product.price).toFixed(2)}</td>
                       <td className="p-4">
@@ -277,7 +419,8 @@ export default function Inventory() {
                           {product.stock_quantity} / Threshold: {product.low_stock_threshold}
                         </span>
                       </td>
-                      <td className="p-4 text-center space-x-2">
+                      <td className="p-4">{expiryBadge}</td>
+                      <td className="p-4 text-center space-x-2 whitespace-nowrap">
                         <button
                           onClick={() => openEdit(product)}
                           className="text-indigo-600 hover:text-indigo-900 font-semibold text-xs border border-indigo-100 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors"
@@ -342,7 +485,7 @@ export default function Inventory() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cost Price ($) *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cost Price (৳) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -355,7 +498,7 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Sale Price ($) *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Sale Price (৳) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -392,6 +535,32 @@ export default function Inventory() {
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Supplier (Optional)</label>
+                <select
+                  name="supplier_id"
+                  value={formData.supplier_id}
+                  onChange={handleInputChange}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none bg-white mb-4"
+                >
+                  <option value="">-- Select Supplier --</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Expiry Date (Optional)</label>
+                <input
+                  type="date"
+                  name="expiry_date"
+                  value={formData.expiry_date}
+                  onChange={handleInputChange}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+                />
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex space-x-3 justify-end">
@@ -454,7 +623,7 @@ export default function Inventory() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cost Price ($) *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cost Price (৳) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -466,7 +635,7 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Sale Price ($) *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Sale Price (৳) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -500,6 +669,32 @@ export default function Inventory() {
                     className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Supplier (Optional)</label>
+                <select
+                  name="supplier_id"
+                  value={formData.supplier_id}
+                  onChange={handleInputChange}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none bg-white mb-4"
+                >
+                  <option value="">-- Select Supplier --</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Expiry Date (Optional)</label>
+                <input
+                  type="date"
+                  name="expiry_date"
+                  value={formData.expiry_date}
+                  onChange={handleInputChange}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+                />
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex space-x-3 justify-end">

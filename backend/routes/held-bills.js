@@ -164,6 +164,108 @@ router.put('/:id', async (req, res) => {
 });
 
 /**
+ * @route   POST /api/held-bills/:id/pay-due
+ * @desc    Collect partial or full due payment on a held bill (atomic transaction)
+ * @access  Private (shop_admin, shop_staff)
+ */
+router.post('/:id/pay-due', async (req, res) => {
+  const heldBillId = req.params.id;
+  const shopId = req.shopId;
+  const userId = req.user.id;
+  const { payment_amount, payment_method = 'cash' } = req.body;
+
+  const parsedAmount = parseFloat(payment_amount);
+
+  if (!parsedAmount || parsedAmount <= 0) {
+    return res.status(400).json({ error: 'Payment amount must be a positive number.' });
+  }
+
+  const validMethods = ['cash', 'card', 'mobile_pay', 'other'];
+  if (!validMethods.includes(payment_method)) {
+    return res.status(400).json({ error: 'Invalid payment method.' });
+  }
+
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // 1. Fetch and lock the held bill
+    const [bills] = await connection.query(
+      'SELECT * FROM held_bills WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [heldBillId, shopId]
+    );
+
+    if (bills.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Held bill not found or access denied.' });
+    }
+
+    const bill = bills[0];
+    const currentDue = parseFloat(bill.due_amount || 0);
+
+    if (currentDue <= 0) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'This held bill has no outstanding due amount.' });
+    }
+
+    if (!bill.customer_id) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'No customer linked to this held bill. Cannot process due payment.' });
+    }
+
+    // Cap payment at the remaining due
+    const actualPayment = Math.min(parsedAmount, currentDue);
+    const newDue = parseFloat((currentDue - actualPayment).toFixed(2));
+
+    // 2. Update held bill due_amount (and auto-complete if fully paid)
+    const newStatus = newDue <= 0 ? 'completed' : bill.status;
+    await connection.query(
+      'UPDATE held_bills SET due_amount = ?, status = ? WHERE id = ? AND shop_id = ?',
+      [newDue, newStatus, heldBillId, shopId]
+    );
+
+    // 3. Reduce customer due_balance
+    await connection.query(
+      'UPDATE customers SET due_balance = GREATEST(due_balance - ?, 0) WHERE id = ? AND shop_id = ?',
+      [actualPayment, bill.customer_id, shopId]
+    );
+
+    // 4. Record a sales transaction for the due payment
+    const note = `Due payment for Held Bill #${heldBillId}`;
+    await connection.query(
+      `INSERT INTO sales (shop_id, customer_id, user_id, total_amount, discount, tax, final_amount, paid_amount, due_amount, payment_method)
+       VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, ?)`,
+      [shopId, bill.customer_id, userId, actualPayment, actualPayment, payment_method]
+    );
+
+    await connection.commit();
+
+    // 5. Fetch updated customer due_balance
+    const [custRows] = await db.query(
+      'SELECT due_balance FROM customers WHERE id = ? AND shop_id = ?',
+      [bill.customer_id, shopId]
+    );
+
+    res.json({
+      message: `Due payment of ৳${actualPayment.toFixed(2)} collected successfully.`,
+      held_bill_id: parseInt(heldBillId),
+      payment_collected: actualPayment,
+      remaining_due: newDue,
+      new_status: newStatus,
+      customer_due_balance: custRows.length > 0 ? parseFloat(custRows[0].due_balance) : 0
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Due payment error:', error);
+    res.status(500).json({ error: 'Server error processing due payment.' });
+  } finally {
+    connection.release();
+  }
+});
+
+/**
  * @route   DELETE /api/held-bills/:id
  * @desc    Delete a held bill
  * @access  Private (shop_admin, shop_staff)

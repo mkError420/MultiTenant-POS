@@ -20,6 +20,12 @@ export default function Customers() {
   const [historySales, setHistorySales] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Due Payment state (inside history modal)
+  const [showCollectDueModal, setShowCollectDueModal] = useState(false);
+  const [duePayAmount, setDuePayAmount] = useState('');
+  const [duePayMethod, setDuePayMethod] = useState('cash');
+  const [duePaySubmitting, setDuePaySubmitting] = useState(false);
+
   // Form states
   const [formData, setFormData] = useState({
     name: '',
@@ -112,6 +118,105 @@ export default function Customers() {
       triggerAlert('error', err.message);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  // Refresh history + customer data after a due payment
+  const refreshHistoryAndCustomer = async (customerId) => {
+    try {
+      const token = localStorage.getItem('token');
+      // Refresh history
+      const histRes = await fetch(`${API_BASE_URL}/customers/${customerId}/history`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (histRes.ok) {
+        const histData = await histRes.json();
+        setHistorySales(histData);
+      }
+      // Refresh all customers (updates table + due_balance)
+      const custRes = await fetch(`${API_BASE_URL}/customers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (custRes.ok) {
+        const custData = await custRes.json();
+        setCustomers(custData);
+        // Update the historyCustomer with fresh due_balance
+        const updatedCust = custData.find(c => c.id === customerId);
+        if (updatedCust) {
+          setHistoryCustomer(updatedCust);
+        }
+      }
+    } catch (err) {
+      console.error('Refresh error:', err);
+    }
+  };
+
+  // Collect due payment from the history modal
+  const handleCollectDue = async (e) => {
+    e.preventDefault();
+    if (!historyCustomer) return;
+
+    const amount = parseFloat(duePayAmount);
+    if (!amount || amount <= 0) {
+      triggerAlert('error', 'Please enter a valid payment amount.');
+      return;
+    }
+
+    setDuePaySubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Find the customer's active held bills with due amounts
+      const heldRes = await fetch(`${API_BASE_URL}/held-bills`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!heldRes.ok) throw new Error('Failed to retrieve held bills.');
+      const heldBills = await heldRes.json();
+
+      // Filter held bills for this customer with outstanding due
+      const customerDueBills = heldBills.filter(
+        b => b.customer_id === historyCustomer.id && b.status === 'held' && parseFloat(b.due_amount || 0) > 0
+      ).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); // oldest first
+
+      if (customerDueBills.length === 0) {
+        throw new Error('No active held bills with due amounts found for this customer.');
+      }
+
+      // Distribute payment across held bills (oldest first)
+      let remaining = amount;
+      for (const bill of customerDueBills) {
+        if (remaining <= 0) break;
+        const billDue = parseFloat(bill.due_amount);
+        const payForThis = Math.min(remaining, billDue);
+
+        const payRes = await fetch(`${API_BASE_URL}/held-bills/${bill.id}/pay-due`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            payment_amount: payForThis,
+            payment_method: duePayMethod
+          })
+        });
+
+        const payData = await payRes.json();
+        if (!payRes.ok) throw new Error(payData.error || 'Failed to process due payment.');
+        remaining -= payForThis;
+      }
+
+      triggerAlert('success', `Due payment of ৳${amount.toFixed(2)} collected successfully!`);
+      setShowCollectDueModal(false);
+      setDuePayAmount('');
+      setDuePayMethod('cash');
+
+      // Dynamically refresh everything
+      await refreshHistoryAndCustomer(historyCustomer.id);
+    } catch (err) {
+      triggerAlert('error', err.message);
+    } finally {
+      setDuePaySubmitting(false);
     }
   };
 
@@ -449,11 +554,6 @@ export default function Customers() {
                 <h3 className="text-lg font-bold text-slate-800">Purchase History</h3>
                 <div className="flex items-center space-x-2 mt-1">
                   <p className="text-xs text-slate-500">Customer Profile: <span className="font-semibold text-indigo-600">{historyCustomer?.name}</span></p>
-                  {parseFloat(historyCustomer?.due_balance || 0) > 0 && (
-                    <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-rose-100">
-                      Due Balance: ৳{parseFloat(historyCustomer.due_balance).toFixed(2)}
-                    </span>
-                  )}
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -469,7 +569,7 @@ export default function Customers() {
                   </button>
                 )}
                 <button 
-                  onClick={() => { setShowHistoryModal(false); setHistorySales([]); }} 
+                  onClick={() => { setShowHistoryModal(false); setHistorySales([]); setShowCollectDueModal(false); }} 
                   className="text-slate-400 hover:text-slate-600 p-1"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -478,6 +578,44 @@ export default function Customers() {
                 </button>
               </div>
             </div>
+
+            {/* Due Balance Summary Card */}
+            {historyCustomer && (
+              <div className={`mt-4 rounded-xl p-4 border flex items-center justify-between ${
+                parseFloat(historyCustomer.due_balance || 0) > 0
+                  ? 'bg-rose-50 border-rose-200'
+                  : 'bg-emerald-50 border-emerald-200'
+              }`}>
+                <div className="flex items-center space-x-3">
+                  <div className={`p-2 rounded-lg ${parseFloat(historyCustomer.due_balance || 0) > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider ${parseFloat(historyCustomer.due_balance || 0) > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>Outstanding Due Balance</p>
+                    <p className={`text-xl font-extrabold ${parseFloat(historyCustomer.due_balance || 0) > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                      ৳{parseFloat(historyCustomer.due_balance || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                {parseFloat(historyCustomer.due_balance || 0) > 0 && (
+                  <button
+                    onClick={() => {
+                      setDuePayAmount(parseFloat(historyCustomer.due_balance).toFixed(2));
+                      setDuePayMethod('cash');
+                      setShowCollectDueModal(true);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-xl text-xs transition-colors shadow-sm flex items-center space-x-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Collect Due</span>
+                  </button>
+                )}
+              </div>
+            )}
             
             <div className="mt-4 flex-1 overflow-y-auto min-h-0 space-y-4 pr-1">
               {historyLoading ? (
@@ -489,92 +627,222 @@ export default function Customers() {
                   No purchases recorded for this customer profile yet.
                 </div>
               ) : (
-                historySales.map((sale) => (
-                  <div key={sale.sale_id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                    {/* Sale Info Header */}
-                    <div className="flex justify-between items-center border-b border-slate-200/60 pb-2 text-xs">
-                      <div>
-                        <span className="font-bold text-slate-800">Sale #{sale.sale_id}</span>
-                        <span className="mx-2 text-slate-300">|</span>
-                        <span className="text-slate-500">
-                          {new Date(sale.created_at).toLocaleString()}
+                historySales.map((sale) => {
+                  const isDuePayment = sale.items.length === 0 && parseFloat(sale.total_amount) === 0;
+                  return (
+                    <div key={sale.sale_id} className={`border rounded-xl p-4 space-y-3 ${isDuePayment ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                      {/* Sale Info Header */}
+                      <div className="flex justify-between items-center border-b border-slate-200/60 pb-2 text-xs">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-800">Sale #{sale.sale_id}</span>
+                          <span className="text-slate-300">|</span>
+                          <span className="text-slate-500">
+                            {new Date(sale.created_at).toLocaleString()}
+                          </span>
+                          {isDuePayment && (
+                            <span className="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase border border-emerald-200">
+                              Due Payment
+                            </span>
+                          )}
+                        </div>
+                        <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
+                          {sale.payment_method.replace('_', ' ')}
                         </span>
                       </div>
-                      <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
-                        {sale.payment_method.replace('_', ' ')}
-                      </span>
-                    </div>
 
-                    {/* Sale Items Table */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="text-slate-400 font-semibold border-b border-slate-200/40">
-                            <th className="pb-1.5">Product Description</th>
-                            <th className="pb-1.5 text-center">Qty</th>
-                            <th className="pb-1.5 text-right">Unit Price</th>
-                            <th className="pb-1.5 text-right">Subtotal</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-700">
-                          {sale.items.map((item) => (
-                            <tr key={item.item_id}>
-                              <td className="py-1.5 font-medium">{item.product_name}</td>
-                              <td className="py-1.5 text-center">{item.quantity}</td>
-                              <td className="py-1.5 text-right">৳{parseFloat(item.unit_price).toFixed(2)}</td>
-                              <td className="py-1.5 text-right font-semibold">৳{parseFloat(item.subtotal).toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                      {isDuePayment ? (
+                        /* Due Payment Display */
+                        <div className="flex items-center justify-between py-2">
+                          <div className="flex items-center space-x-2">
+                            <div className="p-1.5 bg-emerald-100 rounded-lg text-emerald-600">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                            <span className="text-sm font-semibold text-emerald-800">Due Balance Payment Collected</span>
+                          </div>
+                          <span className="text-lg font-extrabold text-emerald-700">৳{parseFloat(sale.final_amount).toFixed(2)}</span>
+                        </div>
+                      ) : (
+                        /* Normal Sale Items Table */
+                        <>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="text-slate-400 font-semibold border-b border-slate-200/40">
+                                  <th className="pb-1.5">Product Description</th>
+                                  <th className="pb-1.5 text-center">Qty</th>
+                                  <th className="pb-1.5 text-right">Unit Price</th>
+                                  <th className="pb-1.5 text-right">Subtotal</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 text-slate-700">
+                                {sale.items.map((item) => (
+                                  <tr key={item.item_id}>
+                                    <td className="py-1.5 font-medium">{item.product_name}</td>
+                                    <td className="py-1.5 text-center">{item.quantity}</td>
+                                    <td className="py-1.5 text-right">৳{parseFloat(item.unit_price).toFixed(2)}</td>
+                                    <td className="py-1.5 text-right font-semibold">৳{parseFloat(item.subtotal).toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
 
-                    {/* Sale Summary Footer */}
-                    <div className="flex justify-end pt-2 border-t border-slate-200/40">
-                      <div className="w-48 text-xs space-y-1">
-                        <div className="flex justify-between text-slate-500">
-                          <span>Subtotal:</span>
-                          <span>৳{parseFloat(sale.total_amount).toFixed(2)}</span>
-                        </div>
-                        {parseFloat(sale.discount) > 0 && (
-                          <div className="flex justify-between text-rose-500">
-                            <span>Discount:</span>
-                            <span>-৳{parseFloat(sale.discount).toFixed(2)}</span>
+                          {/* Sale Summary Footer */}
+                          <div className="flex justify-end pt-2 border-t border-slate-200/40">
+                            <div className="w-48 text-xs space-y-1">
+                              <div className="flex justify-between text-slate-500">
+                                <span>Subtotal:</span>
+                                <span>৳{parseFloat(sale.total_amount).toFixed(2)}</span>
+                              </div>
+                              {parseFloat(sale.discount) > 0 && (
+                                <div className="flex justify-between text-rose-500">
+                                  <span>Discount:</span>
+                                  <span>-৳{parseFloat(sale.discount).toFixed(2)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between text-slate-500">
+                                <span>Tax:</span>
+                                <span>৳{parseFloat(sale.tax).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1 text-sm">
+                                <span>Paid:</span>
+                                <span className="text-emerald-600">৳{parseFloat(sale.paid_amount !== undefined ? sale.paid_amount : sale.final_amount).toFixed(2)}</span>
+                              </div>
+                              {parseFloat(sale.due_amount || 0) > 0 && (
+                                <div className="flex justify-between font-semibold text-rose-600 text-xs">
+                                  <span>Due Balance:</span>
+                                  <span>৳{parseFloat(sale.due_amount).toFixed(2)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        )}
-                        <div className="flex justify-between text-slate-500">
-                          <span>Tax:</span>
-                          <span>৳{parseFloat(sale.tax).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-500">
-                          <span>Final Total:</span>
-                          <span>৳{parseFloat(sale.final_amount).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1 text-sm">
-                          <span>Total Paid:</span>
-                          <span className="text-indigo-600">৳{parseFloat(sale.paid_amount !== undefined ? sale.paid_amount : sale.final_amount).toFixed(2)}</span>
-                        </div>
-                        {parseFloat(sale.due_amount || 0) > 0 && (
-                          <div className="flex justify-between font-semibold text-rose-600 text-xs">
-                            <span>Due Balance:</span>
-                            <span>৳{parseFloat(sale.due_amount).toFixed(2)}</span>
-                          </div>
-                        )}
-                      </div>
+                        </>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
             
             <div className="pt-4 border-t border-slate-100 flex justify-end">
               <button
-                onClick={() => { setShowHistoryModal(false); setHistorySales([]); }}
+                onClick={() => { setShowHistoryModal(false); setHistorySales([]); setShowCollectDueModal(false); }}
                 className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
               >
                 Close History
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- COLLECT DUE MODAL (inside history flow) --- */}
+      {showCollectDueModal && historyCustomer && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Collect Due Payment</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Customer: {historyCustomer.name}</p>
+              </div>
+              <button onClick={() => setShowCollectDueModal(false)} className="text-slate-400 hover:text-slate-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Outstanding Amount Display */}
+            <div className="mt-4 bg-rose-50 border border-rose-200 rounded-xl p-4 text-center">
+              <p className="text-xs font-bold text-rose-500 uppercase tracking-wider">Outstanding Due Balance</p>
+              <p className="text-3xl font-extrabold text-rose-700 mt-1">৳{parseFloat(historyCustomer.due_balance || 0).toFixed(2)}</p>
+            </div>
+
+            <form onSubmit={handleCollectDue} className="mt-5 space-y-4">
+              {/* Payment Amount */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Payment Amount (৳)
+                </label>
+                <div className="flex space-x-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={parseFloat(historyCustomer.due_balance || 0)}
+                    value={duePayAmount}
+                    onChange={(e) => setDuePayAmount(e.target.value)}
+                    required
+                    placeholder="0.00"
+                    className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm font-semibold focus:ring-1 focus:ring-emerald-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDuePayAmount(parseFloat(historyCustomer.due_balance || 0).toFixed(2))}
+                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold py-2 px-3 rounded-lg text-xs transition-colors whitespace-nowrap"
+                  >
+                    Full Amount
+                  </button>
+                </div>
+                {parseFloat(duePayAmount) > 0 && parseFloat(duePayAmount) < parseFloat(historyCustomer.due_balance || 0) && (
+                  <p className="mt-1.5 text-[10px] text-amber-600 font-medium">
+                    Partial payment — remaining: ৳{(parseFloat(historyCustomer.due_balance || 0) - parseFloat(duePayAmount)).toFixed(2)}
+                  </p>
+                )}
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['cash', 'card', 'mobile_pay'].map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setDuePayMethod(method)}
+                      className={`py-2 px-2 rounded-lg text-xs font-semibold border text-center transition-all ${
+                        duePayMethod === method
+                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {method === 'mobile_pay' ? 'Mobile' : method.charAt(0).toUpperCase() + method.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-slate-100 flex space-x-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCollectDueModal(false)}
+                  className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={duePaySubmitting || !parseFloat(duePayAmount) || parseFloat(duePayAmount) <= 0}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-xl text-sm font-semibold transition-colors shadow flex items-center space-x-1.5"
+                >
+                  {duePaySubmitting ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Collect ৳{parseFloat(duePayAmount || 0).toFixed(2)}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -625,26 +893,30 @@ export default function Customers() {
                     <span>Method: {sale.payment_method.toUpperCase()}</span>
                   </div>
 
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
-                        <th style={{ paddingBottom: '4px' }}>Purchased Product</th>
-                        <th style={{ paddingBottom: '4px', textAlign: 'center' }}>Qty</th>
-                        <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Unit Price</th>
-                        <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sale.items.map((item) => (
-                        <tr key={item.item_id} style={{ borderBottom: '1px solid #f8fafc' }}>
-                          <td style={{ padding: '6px 0' }}>{item.product_name}</td>
-                          <td style={{ padding: '6px 0', textAlign: 'center' }}>{item.quantity}</td>
-                          <td style={{ padding: '6px 0', textAlign: 'right' }}>৳{parseFloat(item.unit_price).toFixed(2)}</td>
-                          <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: '600' }}>৳{parseFloat(item.subtotal).toFixed(2)}</td>
+                  {sale.items.length === 0 ? (
+                    <div style={{ padding: '8px 0', fontSize: '13px', fontWeight: '600', color: '#059669' }}>✓ Due Balance Payment Collected — ৳{parseFloat(sale.final_amount).toFixed(2)}</div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
+                          <th style={{ paddingBottom: '4px' }}>Purchased Product</th>
+                          <th style={{ paddingBottom: '4px', textAlign: 'center' }}>Qty</th>
+                          <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Unit Price</th>
+                          <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Subtotal</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {sale.items.map((item) => (
+                          <tr key={item.item_id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                            <td style={{ padding: '6px 0' }}>{item.product_name}</td>
+                            <td style={{ padding: '6px 0', textAlign: 'center' }}>{item.quantity}</td>
+                            <td style={{ padding: '6px 0', textAlign: 'right' }}>৳{parseFloat(item.unit_price).toFixed(2)}</td>
+                            <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: '600' }}>৳{parseFloat(item.subtotal).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
                     <div style={{ width: '200px' }}>

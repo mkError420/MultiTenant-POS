@@ -12,6 +12,8 @@ import Settings from './components/Settings';
 import ManageShops from './components/ManageShops';
 import SystemUsers from './components/SystemUsers';
 import HeldBills from './components/HeldBills';
+import OtherCost from './components/OtherCost';
+import TotalRevenue from './components/TotalRevenue';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -36,6 +38,7 @@ export default function App() {
   const [loading, setLoading] = useState(true); // checking stored token on startup
   const [currentPath, setCurrentPath] = useState('/checkout');
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [expiryAlerts, setExpiryAlerts] = useState([]);
   const [heldBillsCount, setHeldBillsCount] = useState(0);
   const [resumedHeldBill, setResumedHeldBill] = useState(null);
 
@@ -105,7 +108,17 @@ export default function App() {
           });
           if (shopResponse.ok) {
             const shopData = await shopResponse.json();
-            setUser((prev) => ({ ...prev, shop_name: shopData.name }));
+            setUser((prev) => {
+              const updated = {
+                ...prev,
+                shop_name: shopData.name,
+                shop_email: shopData.email,
+                shop_phone: shopData.phone,
+                shop_address: shopData.address
+              };
+              localStorage.setItem('user', JSON.stringify(updated));
+              return updated;
+            });
           }
 
           // Fetch low stock warnings
@@ -114,6 +127,14 @@ export default function App() {
           });
           if (stockResponse.ok) {
             setLowStockAlerts(await stockResponse.json());
+          }
+
+          // Fetch expiring alerts
+          const expiringResponse = await fetch(`${API_BASE_URL}/products?expiring=true`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (expiringResponse.ok) {
+            setExpiryAlerts(await expiringResponse.json());
           }
 
           // Fetch held bills count
@@ -145,6 +166,7 @@ export default function App() {
     localStorage.removeItem('user');
     setUser(null);
     setLowStockAlerts([]);
+    setExpiryAlerts([]);
   };
 
   // Routing Handler
@@ -168,6 +190,8 @@ export default function App() {
       case '/suppliers': return <Suppliers />;
       case '/customers': return <Customers />;
       case '/sales':     return <SalesHistory />;
+      case '/other-cost': return <OtherCost />;
+      case '/total-revenue': return <TotalRevenue />;
       case '/staff':     return <ManageStaff />;
       case '/settings':  return <Settings />;
       default:           return <Checkout resumedHeldBill={resumedHeldBill} onClearResumedHeldBill={() => setResumedHeldBill(null)} onHeldBillsChange={(count) => setHeldBillsCount(count)} />;
@@ -198,6 +222,7 @@ export default function App() {
     <DashboardLayout
       user={user}
       lowStockItems={lowStockAlerts}
+      expiryItems={expiryAlerts}
       heldBillsCount={heldBillsCount}
       currentPath={currentPath}
       onNavigate={(path) => setCurrentPath(path)}

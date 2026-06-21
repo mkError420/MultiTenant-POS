@@ -231,10 +231,13 @@ router.get('/:id', async (req, res) => {
   try {
     // Retrieve sale header
     const [sales] = await db.query(
-      `SELECT s.*, u.name as staff_name, c.name as customer_name 
+      `SELECT s.*, u.name as staff_name, 
+              c.name as customer_name, c.phone as customer_phone, c.address as customer_address,
+              sh.name as shop_name, sh.phone as shop_phone, sh.address as shop_address, sh.email as shop_email
        FROM sales s
        LEFT JOIN users u ON s.user_id = u.id
        LEFT JOIN customers c ON s.customer_id = c.id
+       LEFT JOIN shops sh ON s.shop_id = sh.id
        WHERE s.id = ? AND s.shop_id = ?`,
       [saleId, shopId]
     );
@@ -259,6 +262,86 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Fetch sale details error:', error);
     res.status(500).json({ error: 'Server error retrieving sale details.' });
+  }
+});
+
+/**
+ * @route   DELETE /api/sales/:id
+ * @desc    Delete/void a sale transaction (admin only). Restores stock and adjusts customer due balance.
+ * @access  Private (shop_admin)
+ */
+router.delete('/:id', authorize(['shop_admin']), async (req, res) => {
+  const saleId = req.params.id;
+  const shopId = req.shopId;
+
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // 1. Fetch and lock the sale record
+    const [sales] = await connection.query(
+      'SELECT * FROM sales WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [saleId, shopId]
+    );
+
+    if (sales.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Sale record not found or access denied.' });
+    }
+
+    const sale = sales[0];
+
+    // 2. Fetch all sale_items for stock restoration
+    const [saleItems] = await connection.query(
+      'SELECT * FROM sale_items WHERE sale_id = ? AND shop_id = ?',
+      [saleId, shopId]
+    );
+
+    // 3. Restore stock for each sold item
+    for (const item of saleItems) {
+      await connection.query(
+        'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ? AND shop_id = ?',
+        [item.quantity, item.product_id, shopId]
+      );
+    }
+
+    // 4. Reverse customer due_balance if there was a due amount on this sale
+    const dueAmount = parseFloat(sale.due_amount || 0);
+    if (dueAmount > 0 && sale.customer_id) {
+      await connection.query(
+        'UPDATE customers SET due_balance = GREATEST(due_balance - ?, 0) WHERE id = ? AND shop_id = ?',
+        [dueAmount, sale.customer_id, shopId]
+      );
+    }
+
+    // 5. Delete sale_items first (foreign key child)
+    await connection.query(
+      'DELETE FROM sale_items WHERE sale_id = ? AND shop_id = ?',
+      [saleId, shopId]
+    );
+
+    // 6. Delete the sale record
+    await connection.query(
+      'DELETE FROM sales WHERE id = ? AND shop_id = ?',
+      [saleId, shopId]
+    );
+
+    await connection.commit();
+
+    res.json({
+      message: `Sale #${saleId} deleted successfully. Stock restored and totals adjusted.`,
+      deleted_sale_id: parseInt(saleId),
+      items_restored: saleItems.length,
+      due_reversed: dueAmount
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Delete sale error:', error);
+    res.status(500).json({ error: 'Server error deleting sale transaction.' });
+  } finally {
+    connection.release();
   }
 });
 

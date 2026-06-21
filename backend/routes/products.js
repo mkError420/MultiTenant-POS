@@ -14,23 +14,32 @@ router.use(enforceTenant);
  * @access  Private (shop_admin, shop_staff, or super_admin with shop_id)
  */
 router.get('/', async (req, res) => {
-  const { search, low_stock } = req.query;
+  const { search, low_stock, expiring } = req.query;
   const shopId = req.shopId;
 
   try {
-    let sql = 'SELECT * FROM products WHERE shop_id = ?';
+    let sql = `
+      SELECT p.*, s.name AS supplier_name 
+      FROM products p
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      WHERE p.shop_id = ?
+    `;
     const params = [shopId];
 
     if (search) {
-      sql += ' AND (name LIKE ? OR sku LIKE ?)';
+      sql += ' AND (p.name LIKE ? OR p.sku LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
     }
 
     if (low_stock === 'true') {
-      sql += ' AND stock_quantity <= low_stock_threshold';
+      sql += ' AND p.stock_quantity <= p.low_stock_threshold';
     }
 
-    sql += ' ORDER BY name ASC';
+    if (expiring === 'true') {
+      sql += ' AND p.expiry_date IS NOT NULL AND p.expiry_date <= DATE_ADD(CURRENT_DATE(), INTERVAL 30 DAY)';
+    }
+
+    sql += ' ORDER BY p.name ASC';
 
     const [products] = await db.query(sql, params);
     res.json(products);
@@ -50,7 +59,10 @@ router.get('/:id', async (req, res) => {
 
   try {
     const [products] = await db.query(
-      'SELECT * FROM products WHERE id = ? AND shop_id = ?',
+      `SELECT p.*, s.name AS supplier_name 
+       FROM products p
+       LEFT JOIN suppliers s ON p.supplier_id = s.id
+       WHERE p.id = ? AND p.shop_id = ?`,
       [productId, shopId]
     );
 
@@ -71,7 +83,7 @@ router.get('/:id', async (req, res) => {
  * @access  Private (shop_admin)
  */
 router.post('/', authorize(['shop_admin']), async (req, res) => {
-  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold } = req.body;
+  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id } = req.body;
   const shopId = req.shopId;
 
   if (!name || !sku || price === undefined || cost_price === undefined) {
@@ -90,7 +102,7 @@ router.post('/', authorize(['shop_admin']), async (req, res) => {
     }
 
     const [result] = await db.query(
-      'INSERT INTO products (shop_id, name, sku, price, cost_price, stock_quantity, low_stock_threshold) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO products (shop_id, name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         shopId,
         name,
@@ -98,7 +110,9 @@ router.post('/', authorize(['shop_admin']), async (req, res) => {
         price,
         cost_price,
         stock_quantity || 0,
-        low_stock_threshold !== undefined ? low_stock_threshold : 10
+        low_stock_threshold !== undefined ? low_stock_threshold : 10,
+        expiry_date || null,
+        supplier_id || null
       ]
     );
 
@@ -120,7 +134,7 @@ router.post('/', authorize(['shop_admin']), async (req, res) => {
 router.put('/:id', authorize(['shop_admin']), async (req, res) => {
   const productId = req.params.id;
   const shopId = req.shopId;
-  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold } = req.body;
+  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id } = req.body;
 
   try {
     // 1. Verify product belongs to active tenant
@@ -154,6 +168,8 @@ router.put('/:id', authorize(['shop_admin']), async (req, res) => {
     if (cost_price !== undefined) { updateFields.push('cost_price = ?'); params.push(cost_price); }
     if (stock_quantity !== undefined) { updateFields.push('stock_quantity = ?'); params.push(stock_quantity); }
     if (low_stock_threshold !== undefined) { updateFields.push('low_stock_threshold = ?'); params.push(low_stock_threshold); }
+    if (expiry_date !== undefined) { updateFields.push('expiry_date = ?'); params.push(expiry_date || null); }
+    if (supplier_id !== undefined) { updateFields.push('supplier_id = ?'); params.push(supplier_id || null); }
 
     if (updateFields.length === 0) {
       return res.status(400).json({ error: 'No update parameters provided.' });
