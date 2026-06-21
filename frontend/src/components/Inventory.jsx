@@ -7,6 +7,8 @@ export default function Inventory() {
   const isSuperAdmin = userObj.role === 'super_admin';
 
   const [products, setProducts] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -32,7 +34,8 @@ export default function Inventory() {
     stock_quantity: '',
     low_stock_threshold: '10',
     expiry_date: '',
-    supplier_id: ''
+    supplier_id: '',
+    unit: 'piece'
   });
  
   const fetchProducts = async () => {
@@ -77,6 +80,7 @@ export default function Inventory() {
   };
  
   useEffect(() => {
+    setCurrentPage(1);
     fetchProducts();
   }, [search, lowStockFilter, expiryFilter, selectedShopId]);
  
@@ -160,7 +164,8 @@ export default function Inventory() {
       stock_quantity: product.stock_quantity,
       low_stock_threshold: product.low_stock_threshold,
       expiry_date: product.expiry_date ? product.expiry_date.split('T')[0] : '',
-      supplier_id: product.supplier_id || ''
+      supplier_id: product.supplier_id || '',
+      unit: product.unit || 'piece'
     });
     setShowEditModal(true);
   };
@@ -227,7 +232,8 @@ export default function Inventory() {
       stock_quantity: '',
       low_stock_threshold: '10',
       expiry_date: '',
-      supplier_id: ''
+      supplier_id: '',
+      unit: 'piece'
     });
     setCurrentProduct(null);
   };
@@ -276,6 +282,10 @@ export default function Inventory() {
     document.body.removeChild(link);
     triggerAlert('success', 'Catalog exported successfully!');
   };
+  const totalPages = Math.ceil(products.length / itemsPerPage);
+  const indexOfLastProduct = currentPage * itemsPerPage;
+  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
+  const currentProducts = products.slice(indexOfFirstProduct, indexOfLastProduct);
 
   return (
     <div className="space-y-6">
@@ -548,7 +558,7 @@ export default function Inventory() {
                   </td>
                 </tr>
               ) : (
-                products.map((product) => {
+                currentProducts.map((product) => {
                   const isLowStock = product.stock_quantity <= product.low_stock_threshold;
                   
                   // Expiry status calculation
@@ -601,7 +611,7 @@ export default function Inventory() {
                             ? 'bg-rose-50 text-rose-600 border border-rose-100'
                             : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                         }`}>
-                          {product.stock_quantity} / Threshold: {product.low_stock_threshold}
+                          {product.stock_quantity} {product.unit || 'piece'} / Threshold: {product.low_stock_threshold}
                         </span>
                       </td>
                       <td className="p-4">{expiryBadge}</td>
@@ -629,6 +639,46 @@ export default function Inventory() {
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500">
+            Showing <span className="text-slate-800">{indexOfFirstProduct + 1}</span> to <span className="text-slate-800">{Math.min(indexOfLastProduct, products.length)}</span> of <span className="text-slate-800">{products.length}</span> entries
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
+                  currentPage === page
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- ADD NEW PRODUCT MODAL --- */}
       {showAddModal && (
@@ -699,9 +749,9 @@ export default function Inventory() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Stock Quantity</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quantity</label>
                   <input
                     type="number"
                     name="stock_quantity"
@@ -712,7 +762,21 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Low Stock Alert</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Unit *</label>
+                  <select
+                    name="unit"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none bg-white font-medium"
+                  >
+                    <option value="piece">Piece</option>
+                    <option value="kg">kg</option>
+                    <option value="gm">gm</option>
+                    <option value="liter">Liter</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Low Stock ({formData.unit || 'piece'})</label>
                   <input
                     type="number"
                     name="low_stock_threshold"
@@ -835,9 +899,9 @@ export default function Inventory() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Stock Quantity</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quantity</label>
                   <input
                     type="number"
                     name="stock_quantity"
@@ -847,7 +911,21 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Low Stock Alert</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Unit *</label>
+                  <select
+                    name="unit"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none bg-white font-medium"
+                  >
+                    <option value="piece">Piece</option>
+                    <option value="kg">kg</option>
+                    <option value="gm">gm</option>
+                    <option value="liter">Liter</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Low Stock ({formData.unit || 'piece'})</label>
                   <input
                     type="number"
                     name="low_stock_threshold"

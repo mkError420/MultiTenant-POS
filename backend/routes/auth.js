@@ -42,13 +42,15 @@ router.post('/login', async (req, res) => {
     }
 
     // 4. Generate JWT
+    const allowed_sections = typeof user.allowed_sections === 'string' ? JSON.parse(user.allowed_sections) : (user.allowed_sections || null);
     const payload = {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       shop_id: user.shop_id,
-      shop_name: user.shop_name || 'Global System'
+      shop_name: user.shop_name || 'Global System',
+      allowed_sections
     };
 
     const token = jwt.sign(
@@ -65,7 +67,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         shop_id: user.shop_id,
-        shop_name: user.shop_name || 'Global System'
+        shop_name: user.shop_name || 'Global System',
+        allowed_sections
       }
     });
   } catch (error) {
@@ -82,7 +85,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const [users] = await db.query(
-      'SELECT u.id, u.name, u.email, u.role, u.shop_id, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ? AND u.status = "active"',
+      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ? AND u.status = "active"',
       [req.user.id]
     );
     if (users.length === 0) {
@@ -96,6 +99,7 @@ router.get('/me', authenticate, async (req, res) => {
       role: user.role,
       shop_id: user.shop_id,
       shop_name: user.shop_name || 'Global System',
+      allowed_sections: typeof user.allowed_sections === 'string' ? JSON.parse(user.allowed_sections) : (user.allowed_sections || null),
     });
   } catch (error) {
     console.error('Get me error:', error);
@@ -149,7 +153,7 @@ router.put('/me', authenticate, async (req, res) => {
 
     // 4. Retrieve updated user with shop details
     const [users] = await db.query(
-      'SELECT u.id, u.name, u.email, u.role, u.shop_id, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ?',
+      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ?',
       [req.user.id]
     );
 
@@ -158,6 +162,7 @@ router.put('/me', authenticate, async (req, res) => {
     }
 
     const updatedUser = users[0];
+    const allowed_sections = typeof updatedUser.allowed_sections === 'string' ? JSON.parse(updatedUser.allowed_sections) : (updatedUser.allowed_sections || null);
 
     // 5. Generate a new JWT token to keep frontend session updated
     const payload = {
@@ -166,7 +171,8 @@ router.put('/me', authenticate, async (req, res) => {
       email: updatedUser.email,
       role: updatedUser.role,
       shop_id: updatedUser.shop_id,
-      shop_name: updatedUser.shop_name || 'Global System'
+      shop_name: updatedUser.shop_name || 'Global System',
+      allowed_sections
     };
 
     const token = jwt.sign(
@@ -184,7 +190,8 @@ router.put('/me', authenticate, async (req, res) => {
         email: updatedUser.email,
         role: updatedUser.role,
         shop_id: updatedUser.shop_id,
-        shop_name: updatedUser.shop_name || 'Global System'
+        shop_name: updatedUser.shop_name || 'Global System',
+        allowed_sections
       }
     });
 

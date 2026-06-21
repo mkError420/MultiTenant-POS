@@ -169,10 +169,14 @@ router.get('/staff', authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
   try {
     const [staff] = await db.query(
-      'SELECT id, name, email, role, status, created_at FROM users WHERE shop_id = ? AND role != "super_admin" ORDER BY name ASC',
+      'SELECT id, name, email, role, status, allowed_sections, created_at FROM users WHERE shop_id = ? AND role != "super_admin" ORDER BY name ASC',
       [shopId]
     );
-    res.json(staff);
+    const staffWithParsed = staff.map(s => ({
+      ...s,
+      allowed_sections: typeof s.allowed_sections === 'string' ? JSON.parse(s.allowed_sections) : (s.allowed_sections || null)
+    }));
+    res.json(staffWithParsed);
   } catch (error) {
     console.error('Fetch staff error:', error);
     res.status(500).json({ error: 'Server error retrieving staff logs.' });
@@ -185,7 +189,7 @@ router.get('/staff', authorize(['shop_admin']), async (req, res) => {
  */
 router.post('/staff', authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, allowed_sections } = req.body;
 
   if (!name || !email || !password || !role) {
     return res.status(400).json({ error: 'Please enter all fields.' });
@@ -207,8 +211,8 @@ router.post('/staff', authorize(['shop_admin']), async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     const [result] = await db.query(
-      'INSERT INTO users (shop_id, name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?, "active")',
-      [shopId, name, email, passwordHash, role]
+      'INSERT INTO users (shop_id, name, email, password_hash, role, status, allowed_sections) VALUES (?, ?, ?, ?, ?, "active", ?)',
+      [shopId, name, email, passwordHash, role, allowed_sections ? JSON.stringify(allowed_sections) : null]
     );
 
     res.status(201).json({ message: 'Staff user created successfully.', id: result.insertId });
@@ -225,7 +229,7 @@ router.post('/staff', authorize(['shop_admin']), async (req, res) => {
 router.put('/staff/:id', authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
   const staffId = req.params.id;
-  const { name, role, status, password } = req.body;
+  const { name, role, status, password, allowed_sections } = req.body;
 
   try {
     // Verify target user belongs to same shop
@@ -248,6 +252,10 @@ router.put('/staff/:id', authorize(['shop_admin']), async (req, res) => {
       params.push(role); 
     }
     if (status !== undefined) { updateFields.push('status = ?'); params.push(status); }
+    if (allowed_sections !== undefined) {
+      updateFields.push('allowed_sections = ?');
+      params.push(allowed_sections ? JSON.stringify(allowed_sections) : null);
+    }
     
     if (password) {
       const salt = await bcrypt.genSalt(10);

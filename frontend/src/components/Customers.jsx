@@ -5,9 +5,16 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -284,6 +291,17 @@ export default function Customers() {
     setCurrentCustomer(null);
   };
 
+  const filteredCustomers = customers.filter(customer => {
+    const term = search.toLowerCase();
+    return customer.name.toLowerCase().includes(term) || 
+           (customer.phone && customer.phone.toLowerCase().includes(term));
+  });
+
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+  const indexOfLastCustomer = currentPage * itemsPerPage;
+  const indexOfFirstCustomer = indexOfLastCustomer - itemsPerPage;
+  const currentCustomers = filteredCustomers.slice(indexOfFirstCustomer, indexOfLastCustomer);
+
   return (
     <div className="space-y-6">
       
@@ -311,6 +329,23 @@ export default function Customers() {
         </button>
       </div>
 
+      {/* Filter and Search Bar */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
+          <input
+            type="text"
+            placeholder="Search by name or phone number..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          <svg className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -333,14 +368,14 @@ export default function Customers() {
                     </div>
                   </td>
                 </tr>
-              ) : customers.length === 0 ? (
+              ) : filteredCustomers.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="p-12 text-center text-slate-400">
-                    No customers found. Add a customer profile to start.
+                    No matching customers found.
                   </td>
                 </tr>
               ) : (
-                customers.map((customer) => (
+                currentCustomers.map((customer) => (
                   <tr key={customer.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-4 font-semibold text-slate-800">{customer.name}</td>
                     <td className="p-4 text-slate-600">{customer.phone || '-'}</td>
@@ -382,6 +417,46 @@ export default function Customers() {
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500">
+            Showing <span className="text-slate-800">{indexOfFirstCustomer + 1}</span> to <span className="text-slate-800">{Math.min(indexOfLastCustomer, filteredCustomers.length)}</span> of <span className="text-slate-800">{filteredCustomers.length}</span> entries
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
+                  currentPage === page
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ADD MODAL */}
       {showAddModal && (

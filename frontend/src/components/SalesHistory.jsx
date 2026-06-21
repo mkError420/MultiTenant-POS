@@ -5,6 +5,8 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function SalesHistory() {
   const [sales, setSales] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -72,6 +74,7 @@ export default function SalesHistory() {
   };
 
   useEffect(() => {
+    setCurrentPage(1);
     fetchSales();
   }, [startDate, endDate]);
 
@@ -115,6 +118,11 @@ export default function SalesHistory() {
   const totalRevenue = sales.reduce((sum, s) => sum + parseFloat(s.final_amount || 0), 0);
   const totalPaid = sales.reduce((sum, s) => sum + parseFloat(s.paid_amount !== undefined ? s.paid_amount : s.final_amount || 0), 0);
   const totalDue = sales.reduce((sum, s) => sum + parseFloat(s.due_amount || 0), 0);
+
+  const totalPages = Math.ceil(sales.length / itemsPerPage);
+  const indexOfLastSale = currentPage * itemsPerPage;
+  const indexOfFirstSale = indexOfLastSale - itemsPerPage;
+  const currentSales = sales.slice(indexOfFirstSale, indexOfLastSale);
 
   return (
     <div className="space-y-6">
@@ -433,7 +441,7 @@ export default function SalesHistory() {
                   </td>
                 </tr>
               ) : (
-                sales.map((sale) => (
+                currentSales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-4 font-semibold text-slate-700">#{sale.id}</td>
                     <td className="p-4 text-slate-500">{new Date(sale.created_at).toLocaleString()}</td>
@@ -487,6 +495,46 @@ export default function SalesHistory() {
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500">
+            Showing <span className="text-slate-800">{indexOfFirstSale + 1}</span> to <span className="text-slate-800">{Math.min(indexOfLastSale, sales.length)}</span> of <span className="text-slate-800">{sales.length}</span> entries
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
+                  currentPage === page
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
       {/* --- DETAILED RECEIPT VIEWER MODAL --- */}
       {selectedSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">

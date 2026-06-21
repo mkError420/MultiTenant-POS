@@ -92,7 +92,7 @@ router.get('/:id', async (req, res) => {
  * @access  Private (shop_admin)
  */
 router.post('/', authorize(['shop_admin']), async (req, res) => {
-  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id } = req.body;
+  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id, unit } = req.body;
   const shopId = req.shopId;
 
   if (!name || !sku || price === undefined || cost_price === undefined) {
@@ -111,7 +111,7 @@ router.post('/', authorize(['shop_admin']), async (req, res) => {
     }
 
     const [result] = await db.query(
-      'INSERT INTO products (shop_id, name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO products (shop_id, name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         shopId,
         name,
@@ -121,7 +121,8 @@ router.post('/', authorize(['shop_admin']), async (req, res) => {
         stock_quantity || 0,
         low_stock_threshold !== undefined ? low_stock_threshold : 10,
         expiry_date || null,
-        supplier_id || null
+        supplier_id || null,
+        unit || 'piece'
       ]
     );
 
@@ -143,7 +144,7 @@ router.post('/', authorize(['shop_admin']), async (req, res) => {
 router.put('/:id', authorize(['shop_admin']), async (req, res) => {
   const productId = req.params.id;
   const shopId = req.shopId;
-  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id } = req.body;
+  const { name, sku, price, cost_price, stock_quantity, low_stock_threshold, expiry_date, supplier_id, unit } = req.body;
 
   try {
     // 1. Verify product belongs to active tenant
@@ -179,6 +180,7 @@ router.put('/:id', authorize(['shop_admin']), async (req, res) => {
     if (low_stock_threshold !== undefined) { updateFields.push('low_stock_threshold = ?'); params.push(low_stock_threshold); }
     if (expiry_date !== undefined) { updateFields.push('expiry_date = ?'); params.push(expiry_date || null); }
     if (supplier_id !== undefined) { updateFields.push('supplier_id = ?'); params.push(supplier_id || null); }
+    if (unit !== undefined) { updateFields.push('unit = ?'); params.push(unit); }
 
     if (updateFields.length === 0) {
       return res.status(400).json({ error: 'No update parameters provided.' });

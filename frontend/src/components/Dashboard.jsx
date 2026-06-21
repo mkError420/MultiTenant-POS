@@ -145,6 +145,173 @@ export default function Dashboard() {
 
         </div>
 
+        {/* Super Admin Global Breakdown Chart */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs relative">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Shop Performance Breakdown</h3>
+              <p className="text-xs text-slate-500">Comparing transaction counts and gross revenues across all tenant shops</p>
+            </div>
+            
+            <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 self-end sm:self-auto">
+              <button
+                onClick={() => setChartType('revenue')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  chartType === 'revenue'
+                    ? 'bg-white text-indigo-600 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Revenue (৳)
+              </button>
+              <button
+                onClick={() => setChartType('sales')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  chartType === 'sales'
+                    ? 'bg-white text-indigo-600 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Transactions
+              </button>
+            </div>
+          </div>
+
+          {tenantBreakdown.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+              No tenant breakdown data available.
+            </div>
+          ) : (
+            <div className="relative w-full h-[220px]">
+              {/* SVG Plot */}
+              <svg 
+                viewBox="0 0 600 220" 
+                className="w-full h-full overflow-visible"
+                preserveAspectRatio="none"
+              >
+                {/* Grid Lines */}
+                {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                  const svgHeight = 220;
+                  const paddingTop = 20;
+                  const paddingBottom = 40;
+                  const paddingLeft = 65;
+                  const paddingRight = 25;
+                  const y = paddingTop + (1 - ratio) * (svgHeight - paddingTop - paddingBottom);
+                  const chartValues = tenantBreakdown.map(d => chartType === 'revenue' ? parseFloat(d.shop_revenue || 0) : parseInt(d.sales_count || 0));
+                  const maxVal = Math.max(...chartValues, 10);
+                  const labelVal = ratio * maxVal;
+
+                  return (
+                    <g key={idx}>
+                      <line 
+                        x1={paddingLeft} 
+                        y1={y} 
+                        x2={600 - paddingRight} 
+                        y2={y} 
+                        stroke="#f1f5f9" 
+                        strokeWidth="1.5"
+                      />
+                      <text 
+                        x={paddingLeft - 12} 
+                        y={y + 4} 
+                        textAnchor="end" 
+                        className="text-[10px] font-bold text-slate-400 fill-current font-sans"
+                      >
+                        {chartType === 'revenue' ? `৳${Math.round(labelVal)}` : Math.round(labelVal)}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Bars */}
+                {(() => {
+                  const svgWidth = 600;
+                  const svgHeight = 220;
+                  const paddingLeft = 65;
+                  const paddingRight = 25;
+                  const paddingTop = 20;
+                  const paddingBottom = 40;
+
+                  const chartValues = tenantBreakdown.map(d => chartType === 'revenue' ? parseFloat(d.shop_revenue || 0) : parseInt(d.sales_count || 0));
+                  const maxVal = Math.max(...chartValues, 10);
+
+                  const totalSum = chartValues.reduce((a, b) => a + b, 0);
+
+                  const barWidth = Math.min(40, ((svgWidth - paddingLeft - paddingRight) / tenantBreakdown.length) * 0.5);
+                  const gap = ((svgWidth - paddingLeft - paddingRight) / tenantBreakdown.length);
+
+                  return tenantBreakdown.map((d, index) => {
+                    const val = chartType === 'revenue' ? parseFloat(d.shop_revenue || 0) : parseInt(d.sales_count || 0);
+                    const barHeight = (val / maxVal) * (svgHeight - paddingTop - paddingBottom);
+                    
+                    const x = paddingLeft + (index * gap) + (gap - barWidth) / 2;
+                    const y = svgHeight - paddingBottom - barHeight;
+
+                    const percent = totalSum > 0 ? ((val / totalSum) * 100).toFixed(1) : 0;
+
+                    return (
+                      <g key={index}>
+                        {/* Bar Background shadow catch */}
+                        <rect
+                          x={paddingLeft + index * gap}
+                          y={paddingTop}
+                          width={gap}
+                          height={svgHeight - paddingTop - paddingBottom}
+                          fill="transparent"
+                          className="cursor-pointer"
+                          onMouseEnter={() => setHoveredPoint({ x: x + barWidth / 2, y, val, name: d.shop_name, percent, index })}
+                          onMouseLeave={() => setHoveredPoint(null)}
+                        />
+                        {/* Visual Bar */}
+                        <rect
+                          x={x}
+                          y={y}
+                          width={barWidth}
+                          height={barHeight}
+                          rx="4"
+                          className={`transition-all duration-200 fill-indigo-600 ${hoveredPoint?.index === index ? 'fill-indigo-500 filter drop-shadow-md' : 'opacity-85'}`}
+                        />
+                        {/* Label under X axis */}
+                        <text
+                          x={x + barWidth / 2}
+                          y={svgHeight - 12}
+                          textAnchor="middle"
+                          className="text-[9px] font-bold text-slate-400 fill-current font-sans truncate"
+                          style={{ maxWidth: gap - 4 }}
+                        >
+                          {d.shop_name.length > 8 ? d.shop_name.slice(0, 7) + '..' : d.shop_name}
+                        </text>
+                      </g>
+                    );
+                  });
+                })()}
+              </svg>
+
+              {/* Tooltip Overlay */}
+              {hoveredPoint && (
+                <div
+                  className="absolute bg-slate-900/95 backdrop-blur-md text-white rounded-xl p-3 shadow-xl border border-slate-700 pointer-events-none text-xs flex flex-col space-y-1 transition-all duration-75 z-10"
+                  style={{
+                    left: `${(hoveredPoint.x / 600) * 100}%`,
+                    top: `${(hoveredPoint.y / 220) * 100 - 10}%`,
+                    transform: 'translate(-50%, -100%)'
+                  }}
+                >
+                  <span className="font-semibold text-slate-400">
+                    {hoveredPoint.name}
+                  </span>
+                  <span className="font-extrabold text-white text-sm">
+                    {chartType === 'revenue' ? `৳${parseFloat(hoveredPoint.val).toFixed(2)}` : `${hoveredPoint.val} Transactions`}
+                  </span>
+                  <span className="text-[10px] text-indigo-400 font-bold">
+                    {hoveredPoint.percent}% of total
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* 3. Detailed Data Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           

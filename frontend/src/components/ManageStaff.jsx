@@ -2,6 +2,20 @@ import React, { useState, useEffect } from 'react';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
+const SECTION_OPTIONS = [
+  { label: 'POS Checkout', path: '/checkout' },
+  { label: 'Held Bills', path: '/held-bills' },
+  { label: 'Sales History', path: '/sales' },
+  { label: 'Inventory Catalog', path: '/products' },
+  { label: 'Wastage Logs', path: '/wastage' },
+  { label: 'Suppliers Directory', path: '/suppliers' },
+  { label: 'Customer Directory', path: '/customers' },
+  { label: 'Other Costs', path: '/other-cost' },
+  { label: 'Total Revenue', path: '/total-revenue' },
+  { label: 'Manage Staff', path: '/staff' },
+  { label: 'Settings', path: '/settings' }
+];
+
 export default function ManageStaff() {
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +33,8 @@ export default function ManageStaff() {
     email: '',
     password: '',
     role: 'shop_staff',
-    status: 'active'
+    status: 'active',
+    allowed_sections: []
   });
 
   const fetchStaff = async () => {
@@ -71,7 +86,8 @@ export default function ManageStaff() {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          role: formData.role
+          role: formData.role,
+          allowed_sections: formData.allowed_sections
         })
       });
 
@@ -94,7 +110,8 @@ export default function ManageStaff() {
       email: staff.email,
       role: staff.role,
       status: staff.status,
-      password: '' // Don't preload hash password
+      password: '', // Don't preload hash password
+      allowed_sections: staff.allowed_sections || []
     });
     setShowEditModal(true);
   };
@@ -106,7 +123,8 @@ export default function ManageStaff() {
       const payload = {
         name: formData.name,
         role: formData.role,
-        status: formData.status
+        status: formData.status,
+        allowed_sections: formData.allowed_sections
       };
       if (formData.password) {
         payload.password = formData.password;
@@ -157,7 +175,8 @@ export default function ManageStaff() {
       email: '',
       password: '',
       role: 'shop_staff',
-      status: 'active'
+      status: 'active',
+      allowed_sections: []
     });
     setCurrentSupplier(null);
   };
@@ -224,13 +243,31 @@ export default function ManageStaff() {
                     <td className="p-4 font-semibold text-slate-800">{staff.name}</td>
                     <td className="p-4 text-slate-600 font-mono text-xs">{staff.email}</td>
                     <td className="p-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                        staff.role === 'shop_admin'
-                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                          : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                      }`}>
-                        {staff.role === 'shop_admin' ? 'Shop Admin' : 'Shop Staff'}
-                      </span>
+                      <div className="flex flex-col space-y-1">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold w-max ${
+                          staff.role === 'shop_admin'
+                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                            : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                        }`}>
+                          {staff.role === 'shop_admin' ? 'Shop Admin' : 'Shop Staff'}
+                        </span>
+                        {staff.role === 'shop_staff' && (
+                          <div className="flex flex-wrap gap-1 max-w-xs pt-1">
+                            {staff.allowed_sections && staff.allowed_sections.length > 0 ? (
+                              staff.allowed_sections.map(path => {
+                                const matched = SECTION_OPTIONS.find(o => o.path === path);
+                                return (
+                                  <span key={path} className="text-[9px] bg-slate-100 text-slate-650 px-1.5 py-0.5 rounded border border-slate-205 font-medium">
+                                    {matched ? matched.label : path}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="text-[9px] text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">No Access</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="p-4">
                       <span className={`px-2.5 py-0.5 rounded text-xs font-bold ${
@@ -324,10 +361,37 @@ export default function ManageStaff() {
                   onChange={handleInputChange}
                   className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
                 >
-                  <option value="shop_staff">Shop Staff (Checkout only)</option>
+                  <option value="shop_staff">Shop Staff (Custom Permissions)</option>
                   <option value="shop_admin">Shop Admin (Full catalog control)</option>
                 </select>
               </div>
+
+              {formData.role === 'shop_staff' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Allowed Sections (Access Control) *</label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/60 max-h-48 overflow-y-auto">
+                    {SECTION_OPTIONS.map((sec) => {
+                      const isChecked = formData.allowed_sections?.includes(sec.path);
+                      return (
+                        <label key={sec.path} className="flex items-center space-x-2.5 p-1.5 hover:bg-white rounded-lg cursor-pointer transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const updated = e.target.checked
+                                ? [...(formData.allowed_sections || []), sec.path]
+                                : (formData.allowed_sections || []).filter((p) => p !== sec.path);
+                              setFormData({ ...formData, allowed_sections: updated });
+                            }}
+                            className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                          />
+                          <span className="text-xs text-slate-700 font-medium">{sec.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-slate-100 flex space-x-3 justify-end">
                 <button
@@ -383,10 +447,37 @@ export default function ManageStaff() {
                   onChange={handleInputChange}
                   className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
                 >
-                  <option value="shop_staff">Shop Staff (Checkout only)</option>
+                  <option value="shop_staff">Shop Staff (Custom Permissions)</option>
                   <option value="shop_admin">Shop Admin (Full catalog control)</option>
                 </select>
               </div>
+
+              {formData.role === 'shop_staff' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Allowed Sections (Access Control) *</label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/60 max-h-48 overflow-y-auto">
+                    {SECTION_OPTIONS.map((sec) => {
+                      const isChecked = formData.allowed_sections?.includes(sec.path);
+                      return (
+                        <label key={sec.path} className="flex items-center space-x-2.5 p-1.5 hover:bg-white rounded-lg cursor-pointer transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const updated = e.target.checked
+                                ? [...(formData.allowed_sections || []), sec.path]
+                                : (formData.allowed_sections || []).filter((p) => p !== sec.path);
+                              setFormData({ ...formData, allowed_sections: updated });
+                            }}
+                            className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                          />
+                          <span className="text-xs text-slate-700 font-medium">{sec.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Status Code *</label>

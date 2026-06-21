@@ -28,9 +28,14 @@ function decodeToken(token) {
   }
 }
 
-// Get the default landing path based on role
-function getDefaultPath(role) {
-  if (role === 'super_admin') return '/dashboard';
+// Get the default landing path based on role and allowed_sections
+function getDefaultPath(user) {
+  if (!user) return '/checkout';
+  if (user.role === 'super_admin') return '/dashboard';
+  if (user.role === 'shop_staff') {
+    const allowed = user.allowed_sections || [];
+    return allowed.length > 0 ? allowed[0] : '/checkout';
+  }
   return '/checkout';
 }
 
@@ -81,10 +86,11 @@ export default function App() {
           role: data.role,
           shop_id: data.shop_id,
           shop_name: data.shop_name || 'Global System',
+          allowed_sections: data.allowed_sections
         };
         localStorage.setItem('user', JSON.stringify(userObj));
         setUser(userObj);
-        setCurrentPath(getDefaultPath(userObj.role));
+        setCurrentPath(getDefaultPath(userObj));
       })
       .catch(() => {
         // Invalid/mock token — force logout
@@ -158,7 +164,7 @@ export default function App() {
   // Called by Login component on successful authentication
   const handleLoginSuccess = (userObj) => {
     setUser(userObj);
-    setCurrentPath(getDefaultPath(userObj.role));
+    setCurrentPath(getDefaultPath(userObj));
   };
 
   // Logout
@@ -184,6 +190,31 @@ export default function App() {
         case '/total-revenue': return <TotalRevenue />;
         case '/settings':  return <Settings />;
         default:           return <Dashboard />;
+      }
+    }
+
+    // Staff access guard: redirect if path is not in allowed_sections
+    if (user.role === 'shop_staff') {
+      const allowed = user.allowed_sections || [];
+      if (!allowed.includes(currentPath)) {
+        const firstAllowed = allowed.length > 0 ? allowed[0] : null;
+        if (firstAllowed && firstAllowed !== currentPath) {
+          setTimeout(() => setCurrentPath(firstAllowed), 0);
+        } else if (!firstAllowed) {
+          return (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-rose-50 flex items-center justify-center border border-rose-100 text-rose-500">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m0-6h.01M5.071 19.243a9 9 0 1113.858 0L12 12 5.071 19.243z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Access Restricted</h3>
+                <p className="text-sm text-slate-500 max-w-sm">Your administrator has not granted you access to any sections yet. Please contact support.</p>
+              </div>
+            </div>
+          );
+        }
       }
     }
 

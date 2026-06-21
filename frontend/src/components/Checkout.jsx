@@ -245,6 +245,33 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
     ));
   };
 
+  const handleQuantityInput = (productId, valStr) => {
+    let parsedVal = parseInt(valStr, 10);
+    const targetItem = cart.find(item => item.id === productId);
+    if (!targetItem) return;
+
+    if (valStr === '') {
+      parsedVal = 0;
+    } else if (isNaN(parsedVal) || parsedVal < 0) {
+      parsedVal = 0;
+    }
+
+    if (parsedVal > targetItem.stock_quantity) {
+      triggerAlert('error', `Cannot exceed available stock limit (${targetItem.stock_quantity}) for "${targetItem.name}".`);
+      parsedVal = targetItem.stock_quantity;
+    }
+
+    setCart(cart.map(item => 
+      item.id === productId ? { ...item, quantity: parsedVal } : item
+    ));
+  };
+
+  const handleQuantityBlur = (productId, quantity) => {
+    if (quantity <= 0) {
+      removeFromCart(productId);
+    }
+  };
+
   const removeFromCart = (productId) => {
     setCart(cart.filter(item => item.id !== productId));
   };
@@ -654,53 +681,85 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
                 No items found. Create items in inventory to begin.
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {products.map((product) => {
-                  const inCartItem = cart.find(item => item.id === product.id);
-                  const remainingQty = product.stock_quantity - (inCartItem ? inCartItem.quantity : 0);
-                  const isOutOfStock = remainingQty <= 0;
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                        <th className="p-3 pl-4">SKU</th>
+                        <th className="p-3">Product Name</th>
+                        <th className="p-3 text-right">Price</th>
+                        <th className="p-3 text-center">Stock</th>
+                        <th className="p-3 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                      {products.map((product) => {
+                        const inCartItem = cart.find(item => item.id === product.id);
+                        const remainingQty = product.stock_quantity - (inCartItem ? inCartItem.quantity : 0);
+                        const isOutOfStock = remainingQty <= 0;
 
-                  return (
-                    <div
-                      key={product.id}
-                      onClick={() => !isOutOfStock && addToCart(product)}
-                      className={`group bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer relative overflow-hidden ${
-                        isOutOfStock ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''
-                      }`}
-                    >
-                      {/* Cart Indicator Badge */}
-                      {inCartItem && (
-                        <div className="absolute top-2 right-2 bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow">
-                          {inCartItem.quantity}
-                        </div>
-                      )}
-
-                      <div>
-                        <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-                          {product.sku}
-                        </span>
-                        <h3 className="text-sm font-semibold text-slate-800 mt-0.5 line-clamp-2">
-                          {product.name}
-                        </h3>
-                      </div>
-
-                      <div className="mt-4">
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-base font-extrabold text-slate-800">
-                            ৳{parseFloat(product.price).toFixed(2)}
-                          </span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            remainingQty <= product.low_stock_threshold
-                              ? 'bg-rose-50 text-rose-600'
-                              : 'bg-emerald-50 text-emerald-600'
-                          }`}>
-                            Qty: {remainingQty}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                        return (
+                          <tr key={product.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-3 pl-4 font-mono text-xs font-bold text-slate-500">{product.sku}</td>
+                            <td 
+                              className="p-3 font-semibold text-slate-800 cursor-pointer hover:text-indigo-600 transition-colors"
+                              onClick={() => !isOutOfStock && addToCart(product)}
+                              title={isOutOfStock ? 'Out of stock' : 'Click to add to cart'}
+                            >
+                              {product.name}
+                            </td>
+                            <td className="p-3 text-right font-extrabold text-slate-700">৳{parseFloat(product.price).toFixed(2)}</td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                remainingQty <= product.low_stock_threshold
+                                  ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                                  : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                              }`}>
+                                {remainingQty} left
+                              </span>
+                            </td>
+                            <td className="p-3 text-center">
+                              {inCartItem ? (
+                                <div className="flex items-center justify-center space-x-2">
+                                  <button
+                                    onClick={() => updateQuantity(product.id, -1)}
+                                    className="w-7 h-7 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg flex items-center justify-center transition-colors"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={product.stock_quantity}
+                                    value={inCartItem.quantity === 0 ? '' : inCartItem.quantity}
+                                    onChange={(e) => handleQuantityInput(product.id, e.target.value)}
+                                    onBlur={() => handleQuantityBlur(product.id, inCartItem.quantity)}
+                                    className="w-12 text-center text-xs font-extrabold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded-md border border-indigo-100 focus:ring-1 focus:ring-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  />
+                                  <button
+                                    onClick={() => updateQuantity(product.id, 1)}
+                                    className="w-7 h-7 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold rounded-lg flex items-center justify-center transition-colors"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => addToCart(product)}
+                                  disabled={isOutOfStock}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-xs"
+                                >
+                                  {isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -1473,9 +1532,15 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
                     >
                       -
                     </button>
-                    <span className="px-2.5 py-1 text-xs font-bold text-slate-700">
-                      {item.quantity}
-                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={item.stock_quantity}
+                      value={item.quantity === 0 ? '' : item.quantity}
+                      onChange={(e) => handleQuantityInput(item.id, e.target.value)}
+                      onBlur={() => handleQuantityBlur(item.id, item.quantity)}
+                      className="w-10 text-center text-xs font-bold text-slate-700 bg-transparent border-0 focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
                     <button
                       onClick={() => updateQuantity(item.id, 1)}
                       className="px-2 py-1 hover:bg-slate-200 text-slate-600 transition-colors font-bold"

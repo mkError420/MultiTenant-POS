@@ -4,6 +4,8 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () => {} }) {
   const [heldBills, setHeldBills] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -12,6 +14,10 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
   const [expandedBillId, setExpandedBillId] = useState(null);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
 
   // Due Payment Modal State
   const [showPayDueModal, setShowPayDueModal] = useState(false);
@@ -159,6 +165,10 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
 
     return matchesSearch && matchesStatus;
   });
+  const totalPages = Math.ceil(filteredBills.length / itemsPerPage);
+  const indexOfLastBill = currentPage * itemsPerPage;
+  const indexOfFirstBill = indexOfLastBill - itemsPerPage;
+  const currentBills = filteredBills.slice(indexOfFirstBill, indexOfLastBill);
 
   // Summary statistics
   const totalHeld = heldBills.filter(b => b.status === 'held').length;
@@ -494,7 +504,7 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
                   </td>
                 </tr>
               ) : (
-                filteredBills.map((bill) => {
+                currentBills.map((bill) => {
                   let itemsList = [];
                   try {
                     itemsList = typeof bill.items === 'string' ? JSON.parse(bill.items) : bill.items;
@@ -547,7 +557,7 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
                           ) : (
                             <span className="bg-emerald-50 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-lg border border-emerald-100">
                               Paid ✓
-                            </span>
+                        </span>
                           )}
                         </td>
                         <td className="p-4">
@@ -692,6 +702,46 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500">
+            Showing <span className="text-slate-800">{indexOfFirstBill + 1}</span> to <span className="text-slate-800">{Math.min(indexOfLastBill, filteredBills.length)}</span> of <span className="text-slate-800">{filteredBills.length}</span> entries
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
+                  currentPage === page
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- DUE PAYMENT MODAL --- */}
       {showPayDueModal && payDueBill && (

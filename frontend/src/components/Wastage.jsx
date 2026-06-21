@@ -17,6 +17,12 @@ export default function Wastage() {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [shops, setShops] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, startDate, endDate, selectedShopId]);
  
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -192,6 +198,11 @@ export default function Wastage() {
            w.reason.toLowerCase().includes(searchLower) ||
            (w.notes && w.notes.toLowerCase().includes(searchLower));
   });
+
+  const totalPages = Math.ceil(filteredWastages.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentWastages = filteredWastages.slice(indexOfFirstItem, indexOfLastItem);
 
   // KPI STATS CALCULATION
   const totalFinancialLoss = wastages.reduce((sum, w) => sum + parseFloat(w.cost_loss), 0);
@@ -540,7 +551,7 @@ export default function Wastage() {
                   </td>
                 </tr>
               ) : (
-                filteredWastages.map((w) => (
+                currentWastages.map((w) => (
                   <tr key={w.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-4 pl-6 font-semibold text-slate-700">{formatDate(w.adjusted_at)}</td>
                     {isSuperAdmin && <td className="p-4 font-semibold text-slate-700">{w.shop_name}</td>}
@@ -579,6 +590,46 @@ export default function Wastage() {
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500">
+            Showing <span className="text-slate-800">{indexOfFirstItem + 1}</span> to <span className="text-slate-800">{Math.min(indexOfLastItem, filteredWastages.length)}</span> of <span className="text-slate-800">{filteredWastages.length}</span> entries
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
+                  currentPage === page
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-white hover:bg-slate-50 disabled:hover:bg-white disabled:opacity-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- RECORD STOCK ADJUSTMENT MODAL --- */}
       {showAddModal && (

@@ -12,6 +12,7 @@ const SettingsIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentC
 
 export default function Sidebar({
   role = 'shop_admin',
+  allowedSections = null,
   sidebarOpen,
   setSidebarOpen,
   isCollapsed,
@@ -123,7 +124,18 @@ export default function Sidebar({
     }
   };
 
-  const navItems = getNavItems();
+  const rawNavItems = getNavItems();
+  const navItems = React.useMemo(() => {
+    if (role !== 'shop_staff' || !allowedSections) {
+      return rawNavItems;
+    }
+    return rawNavItems
+      .map(sec => ({
+        ...sec,
+        items: sec.items.filter(item => allowedSections.includes(item.path))
+      }))
+      .filter(sec => sec.items.length > 0);
+  }, [rawNavItems, role, allowedSections]);
 
   return (
     <>
