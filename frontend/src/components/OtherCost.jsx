@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function OtherCost() {
+  const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = userObj.role === 'super_admin';
+
   const [costs, setCosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -10,12 +13,14 @@ export default function OtherCost() {
   const [endDate, setEndDate] = useState('');
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
-
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState('');
+ 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentCost, setCurrentCost] = useState(null);
-
+ 
   // Form states
   const [formData, setFormData] = useState({
     title: '',
@@ -23,7 +28,7 @@ export default function OtherCost() {
     cost_date: new Date().toISOString().split('T')[0],
     notes: ''
   });
-
+ 
   const fetchCosts = async () => {
     setLoading(true);
     try {
@@ -31,7 +36,10 @@ export default function OtherCost() {
       let url = `${API_BASE_URL}/other-costs?`;
       if (startDate) url += `start_date=${startDate}&`;
       if (endDate) url += `end_date=${endDate}&`;
-
+      if (isSuperAdmin && selectedShopId) {
+        url += `shop_id=${selectedShopId}&`;
+      }
+ 
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -44,10 +52,30 @@ export default function OtherCost() {
       setLoading(false);
     }
   };
+ 
+  useEffect(() => {
+    if (isSuperAdmin) {
+      const fetchShops = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/shops`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setShops(data);
+          }
+        } catch (err) {
+          console.error('Failed to fetch shops:', err);
+        }
+      };
+      fetchShops();
+    }
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     fetchCosts();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, selectedShopId]);
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
@@ -256,7 +284,7 @@ export default function OtherCost() {
           <span className="text-sm font-semibold">{alert.message}</span>
         </div>
       )}
-
+ 
       {/* Title Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -273,18 +301,20 @@ export default function OtherCost() {
             </svg>
             <span>Export Expenses</span>
           </button>
-          <button
-            onClick={() => { resetForm(); setShowAddModal(true); }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Add Cost Entry</span>
-          </button>
+          {!isSuperAdmin && (
+            <button
+              onClick={() => { resetForm(); setShowAddModal(true); }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Add Cost Entry</span>
+            </button>
+          )}
         </div>
       </div>
-
+ 
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         {/* Card 1 */}
@@ -302,7 +332,7 @@ export default function OtherCost() {
             <span className="text-xs text-slate-450">All recorded operational overheads</span>
           </div>
         </div>
-
+ 
         {/* Card 2 */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
           <div className="flex items-center space-x-3">
@@ -318,11 +348,11 @@ export default function OtherCost() {
             <span className="text-xs text-slate-450">Overheads in current calendar month</span>
           </div>
         </div>
-
+ 
         {/* Card 3 */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-3 bg-slate-100 text-slate-500 rounded-xl">
+            <div className="p-3 bg-slate-100 text-slate-550 rounded-xl">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
@@ -335,7 +365,7 @@ export default function OtherCost() {
           </div>
         </div>
       </div>
-
+ 
       {/* Filters Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
         {/* Search */}
@@ -351,9 +381,27 @@ export default function OtherCost() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-
+ 
         {/* Date Filters */}
-        <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-650">
+        <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
+          {isSuperAdmin && (
+            <div className="flex items-center space-x-2 mr-4">
+              <span className="text-slate-500">Tenant Shop:</span>
+              <select
+                value={selectedShopId}
+                onChange={(e) => setSelectedShopId(e.target.value)}
+                className="border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-700 font-medium"
+              >
+                <option value="">All Shops (Consolidated)</option>
+                {shops.map((shop) => (
+                  <option key={shop.id} value={shop.id}>
+                    {shop.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex items-center space-x-2">
             <span>From:</span>
             <input
@@ -372,17 +420,17 @@ export default function OtherCost() {
               className="border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-indigo-500 outline-none"
             />
           </div>
-          {(startDate || endDate) && (
+          {(startDate || endDate || (isSuperAdmin && selectedShopId)) && (
             <button
-              onClick={() => { setStartDate(''); setEndDate(''); }}
-              className="text-indigo-600 hover:text-indigo-800 font-bold ml-2 underline"
+              onClick={() => { setStartDate(''); setEndDate(''); setSelectedShopId(''); }}
+              className="text-indigo-600 hover:text-indigo-850 font-bold ml-2 underline"
             >
-              Clear dates
+              Clear filters
             </button>
           )}
         </div>
       </div>
-
+ 
       {/* Ledger Table Container */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -390,16 +438,17 @@ export default function OtherCost() {
             <thead>
               <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
                 <th className="p-4">Cost Date</th>
+                {isSuperAdmin && <th className="p-4">Shop</th>}
                 <th className="p-4">Description</th>
                 <th className="p-4">Amount</th>
                 <th className="p-4">Notes</th>
-                <th className="p-4 text-center">Actions</th>
+                {!isSuperAdmin && <th className="p-4 text-center">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="p-12 text-center">
+                  <td colSpan={isSuperAdmin ? 5 : 5} className="p-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
                     </div>
@@ -407,7 +456,7 @@ export default function OtherCost() {
                 </tr>
               ) : filteredCosts.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-12 text-center text-slate-400">
+                  <td colSpan={isSuperAdmin ? 5 : 5} className="p-12 text-center text-slate-400">
                     No cost entries matched current search criteria or date ranges.
                   </td>
                 </tr>
@@ -415,23 +464,26 @@ export default function OtherCost() {
                 filteredCosts.map((cost) => (
                   <tr key={cost.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-4 font-semibold text-slate-700">{formatDate(cost.cost_date)}</td>
+                    {isSuperAdmin && <td className="p-4 font-semibold text-slate-700">{cost.shop_name}</td>}
                     <td className="p-4 font-bold text-slate-800">{cost.title}</td>
                     <td className="p-4 font-black text-rose-600">{formatCurrency(cost.amount)}</td>
                     <td className="p-4 text-slate-500 italic max-w-xs truncate">{cost.notes || '-'}</td>
-                    <td className="p-4 text-center space-x-2 whitespace-nowrap">
-                      <button
-                        onClick={() => openEdit(cost)}
-                        className="text-indigo-600 hover:text-indigo-900 font-semibold text-xs border border-indigo-100 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(cost.id)}
-                        className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </td>
+                    {!isSuperAdmin && (
+                      <td className="p-4 text-center space-x-2 whitespace-nowrap">
+                        <button
+                          onClick={() => openEdit(cost)}
+                          className="text-indigo-600 hover:text-indigo-900 font-semibold text-xs border border-indigo-100 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(cost.id)}
+                          className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

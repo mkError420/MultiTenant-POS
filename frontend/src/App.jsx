@@ -178,6 +178,8 @@ export default function App() {
         case '/dashboard': return <Dashboard />;
         case '/shops':     return <ManageShops />;
         case '/users':     return <SystemUsers />;
+        case '/wastage':   return <Wastage />;
+        case '/other-cost': return <OtherCost />;
         case '/total-revenue': return <TotalRevenue />;
         case '/settings':  return <Settings />;
         default:           return <Dashboard />;

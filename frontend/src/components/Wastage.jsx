@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function Wastage() {
+  const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = userObj.role === 'super_admin';
+
   const [wastages, setWastages] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,10 +14,12 @@ export default function Wastage() {
   const [endDate, setEndDate] = useState('');
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
-
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState('');
+ 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
-
+ 
   // Form states
   const [formData, setFormData] = useState({
     product_id: '',
@@ -23,7 +28,7 @@ export default function Wastage() {
     notes: '',
     adjusted_at: new Date().toISOString().split('T')[0]
   });
-
+ 
   const fetchWastages = async () => {
     setLoading(true);
     try {
@@ -31,7 +36,10 @@ export default function Wastage() {
       let url = `${API_BASE_URL}/wastages?`;
       if (startDate) url += `start_date=${startDate}&`;
       if (endDate) url += `end_date=${endDate}&`;
-
+      if (isSuperAdmin && selectedShopId) {
+        url += `shop_id=${selectedShopId}&`;
+      }
+ 
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -44,8 +52,9 @@ export default function Wastage() {
       setLoading(false);
     }
   };
-
+ 
   const fetchProducts = async () => {
+    if (isSuperAdmin) return;
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/products`, {
@@ -58,11 +67,31 @@ export default function Wastage() {
       console.error(err.message);
     }
   };
+ 
+  useEffect(() => {
+    if (isSuperAdmin) {
+      const fetchShops = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/shops`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setShops(data);
+          }
+        } catch (err) {
+          console.error('Failed to fetch shops:', err);
+        }
+      };
+      fetchShops();
+    }
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     fetchWastages();
     fetchProducts();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, selectedShopId]);
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
@@ -184,19 +213,21 @@ export default function Wastage() {
           <h2 className="text-2xl font-bold text-slate-800">Damage & Wastage Logs</h2>
           <p className="text-sm text-slate-500">Track expired, damaged, stolen inventory, or log manual stock adjustments</p>
         </div>
-        <div className="flex items-center space-x-3 w-full sm:w-auto">
-          <button
-            onClick={() => { resetForm(); setShowAddModal(true); }}
-            className="bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2 w-full sm:w-auto justify-center"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Log Stock Adjustment</span>
-          </button>
-        </div>
+        {!isSuperAdmin && (
+          <div className="flex items-center space-x-3 w-full sm:w-auto">
+            <button
+              onClick={() => { resetForm(); setShowAddModal(true); }}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2 w-full sm:w-auto justify-center"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Log Stock Adjustment</span>
+            </button>
+          </div>
+        )}
       </div>
-
+ 
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         {/* Card 1 */}
@@ -214,7 +245,7 @@ export default function Wastage() {
             <span className="text-xs text-slate-450">Accumulated cost-price value of loss</span>
           </div>
         </div>
-
+ 
         {/* Card 2 */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
           <div className="flex items-center space-x-3">
@@ -230,7 +261,7 @@ export default function Wastage() {
             <span className="text-xs text-slate-450">Quantity of physical stock written off</span>
           </div>
         </div>
-
+ 
         {/* Card 3 */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
           <div className="flex items-center space-x-3">
@@ -247,7 +278,7 @@ export default function Wastage() {
           </div>
         </div>
       </div>
-
+ 
       {/* Filters Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
         {/* Search */}
@@ -263,9 +294,27 @@ export default function Wastage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-
+ 
         {/* Date Filters */}
         <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
+          {isSuperAdmin && (
+            <div className="flex items-center space-x-2 mr-4">
+              <span className="text-slate-500">Tenant Shop:</span>
+              <select
+                value={selectedShopId}
+                onChange={(e) => setSelectedShopId(e.target.value)}
+                className="border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-rose-500 outline-none text-slate-700 font-medium"
+              >
+                <option value="">All Shops (Consolidated)</option>
+                {shops.map((shop) => (
+                  <option key={shop.id} value={shop.id}>
+                    {shop.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex items-center space-x-2">
             <span>From:</span>
             <input
@@ -284,17 +333,17 @@ export default function Wastage() {
               className="border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-rose-500 outline-none"
             />
           </div>
-          {(startDate || endDate) && (
+          {(startDate || endDate || (isSuperAdmin && selectedShopId)) && (
             <button
-              onClick={() => { setStartDate(''); setEndDate(''); }}
+              onClick={() => { setStartDate(''); setEndDate(''); setSelectedShopId(''); }}
               className="text-rose-600 hover:text-rose-800 font-bold ml-2 underline"
             >
-              Clear dates
+              Clear filters
             </button>
           )}
         </div>
       </div>
-
+ 
       {/* Ledger Table Container */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -302,18 +351,19 @@ export default function Wastage() {
             <thead>
               <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
                 <th className="p-4 pl-6">Adjustment Date</th>
+                {isSuperAdmin && <th className="p-4">Shop</th>}
                 <th className="p-4">Product details</th>
                 <th className="p-4">Qty adjusted</th>
                 <th className="p-4">Estimated Loss</th>
                 <th className="p-4">Reason</th>
                 <th className="p-4">Notes</th>
-                <th className="p-4 text-center pr-6">Action</th>
+                {!isSuperAdmin && <th className="p-4 text-center pr-6">Action</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="p-12 text-center">
+                  <td colSpan={isSuperAdmin ? 8 : 7} className="p-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-rose-600"></div>
                     </div>
@@ -321,7 +371,7 @@ export default function Wastage() {
                 </tr>
               ) : filteredWastages.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-12 text-center text-slate-400">
+                  <td colSpan={isSuperAdmin ? 8 : 7} className="p-12 text-center text-slate-400">
                     No stock adjustments matching search filters or date ranges.
                   </td>
                 </tr>
@@ -329,6 +379,7 @@ export default function Wastage() {
                 filteredWastages.map((w) => (
                   <tr key={w.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-4 pl-6 font-semibold text-slate-700">{formatDate(w.adjusted_at)}</td>
+                    {isSuperAdmin && <td className="p-4 font-semibold text-slate-700">{w.shop_name}</td>}
                     <td className="p-4">
                       <div className="font-bold text-slate-800">{w.product_name}</div>
                       <div className="text-xs text-slate-400 font-mono">SKU: {w.product_sku}</div>
@@ -339,7 +390,7 @@ export default function Wastage() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
                         w.reason === 'Damaged' ? 'bg-amber-100 text-amber-800' :
                         w.reason === 'Expired' ? 'bg-orange-100 text-orange-800' :
-                        w.reason === 'Stolen' ? 'bg-slate-105 bg-slate-100 text-slate-700' :
+                        w.reason === 'Stolen' ? 'bg-slate-100 text-slate-700' :
                         w.reason === 'Spillage' ? 'bg-red-100 text-red-800' :
                         'bg-blue-100 text-blue-800'
                       }`}>
@@ -347,14 +398,16 @@ export default function Wastage() {
                       </span>
                     </td>
                     <td className="p-4 text-slate-500 italic max-w-xs truncate">{w.notes || '-'}</td>
-                    <td className="p-4 text-center pr-6">
-                      <button
-                        onClick={() => handleDelete(w.id)}
-                        className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors"
-                      >
-                        Delete & Restore
-                      </button>
-                    </td>
+                    {!isSuperAdmin && (
+                      <td className="p-4 text-center pr-6">
+                        <button
+                          onClick={() => handleDelete(w.id)}
+                          className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          Delete & Restore
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

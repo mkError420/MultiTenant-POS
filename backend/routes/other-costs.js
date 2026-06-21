@@ -11,24 +11,29 @@ router.use(enforceTenant);
  * @route   GET /api/other-costs
  * @desc    Get all other costs for the active shop
  */
-router.get('/', authorize(['shop_admin']), async (req, res) => {
+router.get('/', authorize(['super_admin', 'shop_admin']), async (req, res) => {
   const shopId = req.shopId;
+  const hasShop = shopId !== null && shopId !== undefined;
   const { start_date, end_date } = req.query;
 
   try {
-    let sql = 'SELECT * FROM other_costs WHERE shop_id = ?';
-    const params = [shopId];
+    let sql = `
+      SELECT oc.*, s.name AS shop_name 
+      FROM other_costs oc 
+      LEFT JOIN shops s ON oc.shop_id = s.id 
+      WHERE ` + (hasShop ? 'oc.shop_id = ?' : '1=1');
+    const params = hasShop ? [shopId] : [];
 
     if (start_date) {
-      sql += ' AND cost_date >= ?';
+      sql += ' AND oc.cost_date >= ?';
       params.push(start_date);
     }
     if (end_date) {
-      sql += ' AND cost_date <= ?';
+      sql += ' AND oc.cost_date <= ?';
       params.push(end_date);
     }
 
-    sql += ' ORDER BY cost_date DESC, created_at DESC';
+    sql += ' ORDER BY oc.cost_date DESC, oc.created_at DESC';
 
     const [costs] = await db.query(sql, params);
     res.json(costs);
