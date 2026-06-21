@@ -5,11 +5,10 @@ const API_BASE_URL = 'http://localhost:5000/api';
 // ─── Small helper components ────────────────────────────────────────────────
 
 const StatusBadge = ({ status }) => (
-  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-    status === 'active'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : 'bg-rose-50 text-rose-600 border-rose-200'
-  }`}>
+  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${status === 'active'
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : 'bg-rose-50 text-rose-600 border-rose-200'
+    }`}>
     <span className={`w-1.5 h-1.5 rounded-full ${status === 'active' ? 'bg-emerald-500' : 'bg-rose-400'}`} />
     {status === 'active' ? 'Active' : 'Suspended'}
   </span>
@@ -43,9 +42,8 @@ const inputCls = "w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-
 function Toast({ alert, onDismiss }) {
   if (!alert) return null;
   return (
-    <div className={`fixed top-5 right-5 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-white text-sm font-semibold ${
-      alert.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
-    }`}>
+    <div className={`fixed top-5 right-5 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-white text-sm font-semibold ${alert.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+      }`}>
       {alert.type === 'success' ? (
         <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
@@ -563,9 +561,8 @@ export default function ManageShops() {
                 Edit Shop
               </button>
               <button onClick={() => toggleStatus(detailShop)}
-                className={`w-full flex items-center justify-center gap-2 text-sm font-semibold py-2 rounded-xl border transition-colors ${
-                  detailShop.status === 'active' ? 'border-amber-200 text-amber-700 hover:bg-amber-50' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                }`}>
+                className={`w-full flex items-center justify-center gap-2 text-sm font-semibold py-2 rounded-xl border transition-colors ${detailShop.status === 'active' ? 'border-amber-200 text-amber-700 hover:bg-amber-50' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                  }`}>
                 {detailShop.status === 'active' ? '⏸ Suspend Shop' : '▶ Activate Shop'}
               </button>
               <button onClick={() => openDelete(detailShop)}
@@ -789,9 +786,8 @@ export default function ManageShops() {
                     <div key={user.id}
                       className="flex items-center gap-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 transition-colors">
                       {/* Avatar */}
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
-                        user.role === 'shop_admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
-                      }`}>
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${user.role === 'shop_admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
                         {user.name.charAt(0).toUpperCase()}
                       </div>
 
@@ -822,11 +818,10 @@ export default function ManageShops() {
                         <button
                           onClick={() => toggleUserStatus(user)}
                           title={user.status === 'active' ? 'Suspend user' : 'Activate user'}
-                          className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                            user.status === 'active'
-                              ? 'border-amber-300 text-amber-700 hover:bg-amber-50'
-                              : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
-                          }`}
+                          className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${user.status === 'active'
+                            ? 'border-amber-300 text-amber-700 hover:bg-amber-50'
+                            : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                            }`}
                         >
                           {user.status === 'active' ? (
                             <>
