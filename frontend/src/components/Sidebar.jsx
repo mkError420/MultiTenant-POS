@@ -31,6 +31,7 @@ export default function Sidebar({
               { label: 'Global Analytics', path: '/dashboard', icon: <DashboardIcon /> },
               { label: 'Manage Shops', path: '/shops', icon: <ShopsIcon /> },
               { label: 'System Users', path: '/users', icon: <UsersIcon /> },
+              { label: 'Inventory (Products)', path: '/products', icon: <InventoryIcon /> },
             ]
           },
           {

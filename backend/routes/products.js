@@ -16,15 +16,16 @@ router.use(enforceTenant);
 router.get('/', async (req, res) => {
   const { search, low_stock, expiring } = req.query;
   const shopId = req.shopId;
+  const hasShop = shopId !== null && shopId !== undefined;
 
   try {
     let sql = `
-      SELECT p.*, s.name AS supplier_name 
+      SELECT p.*, s.name AS supplier_name, sh.name AS shop_name
       FROM products p
       LEFT JOIN suppliers s ON p.supplier_id = s.id
-      WHERE p.shop_id = ?
-    `;
-    const params = [shopId];
+      LEFT JOIN shops sh ON p.shop_id = sh.id
+      WHERE ` + (hasShop ? 'p.shop_id = ?' : '1=1');
+    const params = hasShop ? [shopId] : [];
 
     if (search) {
       sql += ' AND (p.name LIKE ? OR p.sku LIKE ?)';
@@ -56,15 +57,23 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const productId = req.params.id;
   const shopId = req.shopId;
+  const hasShop = shopId !== null && shopId !== undefined;
 
   try {
-    const [products] = await db.query(
-      `SELECT p.*, s.name AS supplier_name 
-       FROM products p
-       LEFT JOIN suppliers s ON p.supplier_id = s.id
-       WHERE p.id = ? AND p.shop_id = ?`,
-      [productId, shopId]
-    );
+    let sql = `
+      SELECT p.*, s.name AS supplier_name 
+      FROM products p
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      WHERE p.id = ?
+    `;
+    const params = [productId];
+
+    if (hasShop) {
+      sql += ' AND p.shop_id = ?';
+      params.push(shopId);
+    }
+
+    const [products] = await db.query(sql, params);
 
     if (products.length === 0) {
       return res.status(404).json({ error: 'Product not found or access denied.' });

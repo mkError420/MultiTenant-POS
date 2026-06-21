@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function Inventory() {
+  const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperAdmin = userObj.role === 'super_admin';
+
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,12 +14,14 @@ export default function Inventory() {
   const [expiryFilter, setExpiryFilter] = useState(false);
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
-
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState('');
+ 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(null);
-
+ 
   // Form states
   const [formData, setFormData] = useState({
     name: '',
@@ -28,16 +33,20 @@ export default function Inventory() {
     expiry_date: '',
     supplier_id: ''
   });
-
+ 
   const fetchProducts = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const url = `${API_BASE_URL}/products?search=${encodeURIComponent(search)}${
+      let url = `${API_BASE_URL}/products?search=${encodeURIComponent(search)}${
         lowStockFilter ? '&low_stock=true' : ''
       }${
         expiryFilter ? '&expiring=true' : ''
       }`;
+      if (isSuperAdmin && selectedShopId) {
+        url += `&shop_id=${selectedShopId}`;
+      }
+      
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -50,8 +59,9 @@ export default function Inventory() {
       setLoading(false);
     }
   };
-
+ 
   const fetchSuppliers = async () => {
+    if (isSuperAdmin) return;
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/suppliers`, {
@@ -64,14 +74,31 @@ export default function Inventory() {
       console.error('Error fetching suppliers:', err);
     }
   };
-
+ 
   useEffect(() => {
     fetchProducts();
-  }, [search, lowStockFilter, expiryFilter]);
-
+  }, [search, lowStockFilter, expiryFilter, selectedShopId]);
+ 
   useEffect(() => {
     fetchSuppliers();
-  }, []);
+    if (isSuperAdmin) {
+      const fetchShops = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/shops`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setShops(data);
+          }
+        } catch (err) {
+          console.error('Failed to fetch shops:', err);
+        }
+      };
+      fetchShops();
+    }
+  }, [isSuperAdmin]);
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
@@ -277,18 +304,20 @@ export default function Inventory() {
             </svg>
             <span>Export Catalog</span>
           </button>
-          <button
-            onClick={() => { resetForm(); setShowAddModal(true); }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Add New Product</span>
-          </button>
+          {!isSuperAdmin && (
+            <button
+              onClick={() => { resetForm(); setShowAddModal(true); }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Add New Product</span>
+            </button>
+          )}
         </div>
       </div>
-
+ 
       {/* Filter and Search Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
         
@@ -305,9 +334,27 @@ export default function Inventory() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-
+ 
         {/* Filters Group */}
         <div className="flex flex-wrap items-center gap-4 md:gap-6">
+          {isSuperAdmin && (
+            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-655 mr-2">
+              <span className="text-slate-500">Tenant Shop:</span>
+              <select
+                value={selectedShopId}
+                onChange={(e) => setSelectedShopId(e.target.value)}
+                className="border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-700 font-medium"
+              >
+                <option value="">All Shops (Consolidated)</option>
+                {shops.map((shop) => (
+                  <option key={shop.id} value={shop.id}>
+                    {shop.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Low Stock Checkbox Filter */}
           <label className="flex items-center space-x-2.5 cursor-pointer text-sm font-semibold text-slate-600">
             <input
@@ -318,7 +365,7 @@ export default function Inventory() {
             />
             <span>Show Low Stock Warnings Only</span>
           </label>
-
+ 
           {/* Expiry Checkbox Filter */}
           <label className="flex items-center space-x-2.5 cursor-pointer text-sm font-semibold text-slate-600">
             <input
@@ -331,7 +378,7 @@ export default function Inventory() {
           </label>
         </div>
       </div>
-
+ 
       {/* Inventory Table Container */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -339,19 +386,20 @@ export default function Inventory() {
             <thead>
               <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
                 <th className="p-4">SKU</th>
+                {isSuperAdmin && <th className="p-4">Shop</th>}
                 <th className="p-4">Product Name</th>
                 <th className="p-4">Supplier</th>
                 <th className="p-4">Cost Price</th>
                 <th className="p-4">Sale Price</th>
                 <th className="p-4">Stock</th>
                 <th className="p-4">Expiry</th>
-                <th className="p-4 text-center">Actions</th>
+                {!isSuperAdmin && <th className="p-4 text-center">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="p-12 text-center">
+                  <td colSpan={8} className="p-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
                     </div>
@@ -359,7 +407,7 @@ export default function Inventory() {
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="p-12 text-center text-slate-400">
+                  <td colSpan={8} className="p-12 text-center text-slate-400">
                     No products matched current search filters.
                   </td>
                 </tr>
@@ -394,7 +442,7 @@ export default function Inventory() {
                       );
                     } else {
                       expiryBadge = (
-                        <span className="bg-slate-50 text-slate-650 border border-slate-200 px-2.5 py-0.5 rounded text-xs font-semibold">
+                        <span className="bg-slate-50 text-slate-655 border border-slate-200 px-2.5 py-0.5 rounded text-xs font-semibold">
                           {expiry.toLocaleDateString()}
                         </span>
                       );
@@ -402,10 +450,11 @@ export default function Inventory() {
                   } else {
                     expiryBadge = <span className="text-slate-400 text-xs">N/A</span>;
                   }
-
+ 
                   return (
                     <tr key={product.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4 font-mono text-xs font-bold text-slate-500">{product.sku}</td>
+                      {isSuperAdmin && <td className="p-4 font-semibold text-slate-800">{product.shop_name}</td>}
                       <td className="p-4 font-semibold text-slate-800">{product.name}</td>
                       <td className="p-4 text-slate-700 font-medium">{product.supplier_name || 'N/A'}</td>
                       <td className="p-4 text-slate-600">৳{parseFloat(product.cost_price).toFixed(2)}</td>
@@ -420,20 +469,22 @@ export default function Inventory() {
                         </span>
                       </td>
                       <td className="p-4">{expiryBadge}</td>
-                      <td className="p-4 text-center space-x-2 whitespace-nowrap">
-                        <button
-                          onClick={() => openEdit(product)}
-                          className="text-indigo-600 hover:text-indigo-900 font-semibold text-xs border border-indigo-100 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors"
-                        >
-                          Delete
-                        </button>
-                      </td>
+                      {!isSuperAdmin && (
+                        <td className="p-4 text-center space-x-2">
+                          <button
+                            onClick={() => openEdit(product)}
+                            className="text-indigo-600 hover:text-indigo-900 font-semibold text-xs border border-indigo-100 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.id)}
+                            className="text-rose-600 hover:text-rose-900 font-semibold text-xs border border-rose-100 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
