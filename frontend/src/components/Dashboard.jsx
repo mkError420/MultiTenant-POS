@@ -19,6 +19,9 @@ export default function Dashboard() {
   });
   const [recentSales, setRecentSales] = useState([]);
   const [tenantBreakdown, setTenantBreakdown] = useState([]);
+  const [salesTrend, setSalesTrend] = useState([]);
+  const [chartType, setChartType] = useState('revenue'); // 'revenue' or 'sales'
+  const [hoveredPoint, setHoveredPoint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -43,6 +46,9 @@ export default function Dashboard() {
       }
       if (data.tenant_breakdown) {
         setTenantBreakdown(data.tenant_breakdown);
+      }
+      if (data.sales_trend) {
+        setSalesTrend(data.sales_trend);
       }
     } catch (err) {
       console.error(err);
@@ -268,6 +274,200 @@ export default function Dashboard() {
           </div>
         </div>
 
+      </div>
+
+      {/* Sales Performance Trend Chart */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs relative">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Sales Performance Trend</h3>
+            <p className="text-xs text-slate-500">Daily business transaction volume and gross revenues over the last 7 days</p>
+          </div>
+          
+          <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 self-end sm:self-auto">
+            <button
+              onClick={() => setChartType('revenue')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                chartType === 'revenue'
+                  ? 'bg-white text-indigo-650 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Revenue (৳)
+            </button>
+            <button
+              onClick={() => setChartType('sales')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                chartType === 'sales'
+                  ? 'bg-white text-indigo-650 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Transactions
+            </button>
+          </div>
+        </div>
+
+        {salesTrend.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+            No sales trend data available.
+          </div>
+        ) : (
+          <div className="relative w-full h-[220px]">
+            {/* SVG Plot */}
+            <svg 
+              viewBox="0 0 600 220" 
+              className="w-full h-full overflow-visible"
+              preserveAspectRatio="none"
+            >
+              <defs>
+                <linearGradient id="chartAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.2" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Grid Lines */}
+              {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                const svgHeight = 220;
+                const paddingTop = 20;
+                const paddingBottom = 40;
+                const paddingLeft = 55;
+                const paddingRight = 25;
+                const y = paddingTop + (1 - ratio) * (svgHeight - paddingTop - paddingBottom);
+                const chartValues = salesTrend.map(d => chartType === 'revenue' ? parseFloat(d.revenue) : parseInt(d.sales_count));
+                const maxVal = Math.max(...chartValues, 10);
+                const labelVal = ratio * maxVal;
+
+                return (
+                  <g key={idx}>
+                    <line 
+                      x1={paddingLeft} 
+                      y1={y} 
+                      x2={600 - paddingRight} 
+                      y2={y} 
+                      stroke="#f1f5f9" 
+                      strokeWidth="1.5"
+                    />
+                    <text 
+                      x={paddingLeft - 12} 
+                      y={y + 4} 
+                      textAnchor="end" 
+                      className="text-[10px] font-bold text-slate-400 fill-current font-sans"
+                    >
+                      {chartType === 'revenue' ? `৳${Math.round(labelVal)}` : Math.round(labelVal)}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Paths and Dots */}
+              {(() => {
+                const svgWidth = 600;
+                const svgHeight = 220;
+                const paddingLeft = 55;
+                const paddingRight = 25;
+                const paddingTop = 20;
+                const paddingBottom = 40;
+
+                const chartValues = salesTrend.map(d => chartType === 'revenue' ? parseFloat(d.revenue) : parseInt(d.sales_count));
+                const maxVal = Math.max(...chartValues, 10);
+
+                const chartPoints = salesTrend.map((d, index) => {
+                  const val = chartType === 'revenue' ? parseFloat(d.revenue) : parseInt(d.sales_count);
+                  const x = paddingLeft + (index * (svgWidth - paddingLeft - paddingRight) / (salesTrend.length - 1 || 1));
+                  const y = svgHeight - paddingBottom - ((val / maxVal) * (svgHeight - paddingTop - paddingBottom));
+                  return { x, y, val, date: d.date };
+                });
+
+                const linePath = chartPoints.reduce((path, pt, i) => {
+                  return path + (i === 0 ? `M ${pt.x} ${pt.y}` : ` L ${pt.x} ${pt.y}`);
+                }, '');
+
+                const areaPath = `${linePath} L ${chartPoints[chartPoints.length - 1].x} ${svgHeight - paddingBottom} L ${chartPoints[0].x} ${svgHeight - paddingBottom} Z`;
+
+                return (
+                  <>
+                    {/* Area fill */}
+                    <path d={areaPath} fill="url(#chartAreaGradient)" />
+
+                    {/* Stroke line */}
+                    <path 
+                      d={linePath} 
+                      fill="none" 
+                      stroke="#4f46e5" 
+                      strokeWidth="3" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                    />
+
+                    {/* Interactive points */}
+                    {chartPoints.map((pt, idx) => (
+                      <g key={idx}>
+                        {/* Large pointer catcher */}
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="18"
+                          fill="transparent"
+                          className="cursor-pointer"
+                          onMouseEnter={() => setHoveredPoint({ ...pt, index: idx })}
+                          onMouseLeave={() => setHoveredPoint(null)}
+                        />
+                        {/* Styled visual dot */}
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={hoveredPoint?.index === idx ? "6" : "4.5"}
+                          fill={hoveredPoint?.index === idx ? "#4f46e5" : "#ffffff"}
+                          stroke="#4f46e5"
+                          strokeWidth={hoveredPoint?.index === idx ? "3" : "2"}
+                          className="pointer-events-none transition-all duration-150"
+                        />
+                      </g>
+                    ))}
+
+                    {/* X-Axis labels */}
+                    {chartPoints.map((pt, idx) => {
+                      const dateObj = new Date(pt.date);
+                      const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                      return (
+                        <text
+                          key={idx}
+                          x={pt.x}
+                          y={svgHeight - 12}
+                          textAnchor="middle"
+                          className="text-[10px] font-bold text-slate-400 fill-current font-sans"
+                        >
+                          {label}
+                        </text>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+            </svg>
+
+            {/* Tooltip Overlay */}
+            {hoveredPoint && (
+              <div
+                className="absolute bg-slate-900/95 backdrop-blur-md text-white rounded-xl p-3 shadow-xl border border-slate-700 pointer-events-none text-xs flex flex-col space-y-1 transition-all duration-75 z-10"
+                style={{
+                  left: `${(hoveredPoint.x / 600) * 100}%`,
+                  top: `${(hoveredPoint.y / 220) * 100 - 10}%`,
+                  transform: 'translate(-50%, -100%)'
+                }}
+              >
+                <span className="font-semibold text-slate-400">
+                  {new Date(hoveredPoint.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                </span>
+                <span className="font-extrabold text-white text-sm">
+                  {chartType === 'revenue' ? `৳${parseFloat(hoveredPoint.val).toFixed(2)}` : `${hoveredPoint.val} Sales`}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 3. Detailed Data Section */}

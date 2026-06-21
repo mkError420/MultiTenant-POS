@@ -7,6 +7,8 @@ export default function TotalRevenue() {
   const isSuperAdmin = userObj.role === 'super_admin';
 
   const [revenueData, setRevenueData] = useState(null);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [hoveredSlice, setHoveredSlice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -382,6 +384,158 @@ export default function TotalRevenue() {
                 </div>
               </div>
 
+              {/* Dynamic Line Chart */}
+              {(() => {
+                const trend = revenueData?.trend || [];
+                if (trend.length === 0) return null;
+
+                const vals = trend.map(t => parseFloat(t.net_profit_cogs || 0));
+                const maxVal = Math.max(...vals, 1000);
+                const minVal = Math.min(...vals, 0);
+                const valRange = maxVal - minVal || 1;
+
+                const svgWidth = 400;
+                const svgHeight = 130;
+                const paddingLeft = 50;
+                const paddingRight = 15;
+                const paddingTop = 15;
+                const paddingBottom = 25;
+
+                const chartPoints = trend.map((t, index) => {
+                  const val = parseFloat(t.net_profit_cogs || 0);
+                  const x = paddingLeft + (index * (svgWidth - paddingLeft - paddingRight) / (trend.length - 1 || 1));
+                  const y = svgHeight - paddingBottom - (((val - minVal) / valRange) * (svgHeight - paddingTop - paddingBottom));
+                  return { x, y, val, date: t.date };
+                });
+
+                const linePath = chartPoints.reduce((path, pt, i) => {
+                  return path + (i === 0 ? `M ${pt.x} ${pt.y}` : ` L ${pt.x} ${pt.y}`);
+                }, '');
+
+                return (
+                  <div className="mt-5 border border-slate-100 rounded-xl p-3 bg-slate-50/50 relative">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Line Chart (Profit Trend)</span>
+                      <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">7 Days</span>
+                    </div>
+
+                    <div className="relative w-full h-[110px]">
+                      <svg 
+                        viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
+                        className="w-full h-full overflow-visible"
+                        preserveAspectRatio="none"
+                      >
+                        {/* Zero Line if negative numbers exist */}
+                        {minVal < 0 && (
+                          (() => {
+                            const zeroY = svgHeight - paddingBottom - (((0 - minVal) / valRange) * (svgHeight - paddingTop - paddingBottom));
+                            return (
+                              <line 
+                                x1={paddingLeft} 
+                                y1={zeroY} 
+                                x2={svgWidth - paddingRight} 
+                                y2={zeroY} 
+                                stroke="#cbd5e1" 
+                                strokeWidth="1" 
+                                strokeDasharray="3 3"
+                              />
+                            );
+                          })()
+                        )}
+
+                        {/* Line Path */}
+                        <path 
+                          d={linePath} 
+                          fill="none" 
+                          stroke="#6366f1" 
+                          strokeWidth="2.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+
+                        {/* Interactive dots */}
+                        {chartPoints.map((pt, idx) => (
+                          <g key={idx}>
+                            <circle
+                              cx={pt.x}
+                              cy={pt.y}
+                              r="12"
+                              fill="transparent"
+                              className="cursor-pointer"
+                              onMouseEnter={() => setHoveredPoint({ ...pt, index: idx })}
+                              onMouseLeave={() => setHoveredPoint(null)}
+                            />
+                            <circle
+                              cx={pt.x}
+                              cy={pt.y}
+                              r={hoveredPoint?.index === idx ? "4.5" : "3"}
+                              fill={hoveredPoint?.index === idx ? "#6366f1" : "#ffffff"}
+                              stroke="#6366f1"
+                              strokeWidth={hoveredPoint?.index === idx ? "2" : "1.5"}
+                              className="pointer-events-none transition-all duration-150"
+                            />
+                          </g>
+                        ))}
+
+                        {/* X-Axis labels */}
+                        {chartPoints.map((pt, idx) => {
+                          const dateObj = new Date(pt.date);
+                          const label = dateObj.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+                          return (
+                            <text
+                              key={idx}
+                              x={pt.x}
+                              y={svgHeight - 6}
+                              textAnchor="middle"
+                              className="text-[8px] font-bold text-slate-400 fill-current font-sans"
+                            >
+                              {label}
+                            </text>
+                          );
+                        })}
+
+                        {/* Y-Axis Min/Max labels */}
+                        <text
+                          x={paddingLeft - 8}
+                          y={paddingTop + 6}
+                          textAnchor="end"
+                          className="text-[8px] font-extrabold text-slate-400 fill-current font-sans"
+                        >
+                          ৳{Math.round(maxVal)}
+                        </text>
+                        <text
+                          x={paddingLeft - 8}
+                          y={svgHeight - paddingBottom}
+                          textAnchor="end"
+                          className="text-[8px] font-extrabold text-slate-400 fill-current font-sans"
+                        >
+                          ৳{Math.round(minVal)}
+                        </text>
+                      </svg>
+
+                      {/* Tooltip */}
+                      {hoveredPoint && (
+                        <div
+                          className="absolute bg-slate-900/95 backdrop-blur-md text-white rounded-lg p-2 shadow-lg border border-slate-700 pointer-events-none text-[10px] flex flex-col space-y-0.5 transition-all duration-75 z-10"
+                          style={{
+                            left: `${(hoveredPoint.x / svgWidth) * 100}%`,
+                            top: `${(hoveredPoint.y / svgHeight) * 100 - 5}%`,
+                            transform: 'translate(-50%, -100%)'
+                          }}
+                        >
+                          <span className="font-semibold text-slate-400">
+                            {new Date(hoveredPoint.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                          </span>
+                          <span className="font-extrabold text-white">
+                            Profit: ৳{parseFloat(hoveredPoint.val).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-3 text-xs text-slate-500">
                 <span className="font-bold text-slate-700 block mb-0.5">What is COGS Basis?</span>
                 Measures trading profitability by subtracting the *original cost price* of items actually sold and wastage write-off value, rather than raw purchasing expenditure. Gives you the exact sales margin.
@@ -430,6 +584,157 @@ export default function TotalRevenue() {
                 </div>
               </div>
 
+              {/* Dynamic Bar Chart */}
+              {(() => {
+                const trend = revenueData?.trend || [];
+                if (trend.length === 0) return null;
+
+                const vals = trend.map(t => parseFloat(t.net_profit_cashflow || 0));
+                const maxVal = Math.max(...vals, 1000);
+                const minVal = Math.min(...vals, 0);
+                const valRange = maxVal - minVal || 1;
+
+                const svgWidth = 400;
+                const svgHeight = 130;
+                const paddingLeft = 50;
+                const paddingRight = 15;
+                const paddingTop = 15;
+                const paddingBottom = 25;
+
+                const zeroY = svgHeight - paddingBottom - (((0 - minVal) / valRange) * (svgHeight - paddingTop - paddingBottom));
+                const availableWidth = svgWidth - paddingLeft - paddingRight;
+                const colWidth = availableWidth / trend.length;
+                const barWidth = 20;
+
+                const chartBars = trend.map((t, index) => {
+                  const val = parseFloat(t.net_profit_cashflow || 0);
+                  const x = paddingLeft + (index * colWidth) + (colWidth - barWidth) / 2;
+                  const yVal = svgHeight - paddingBottom - (((val - minVal) / valRange) * (svgHeight - paddingTop - paddingBottom));
+                  
+                  let y, height, isPositive;
+                  if (val >= 0) {
+                    y = yVal;
+                    height = zeroY - yVal;
+                    isPositive = true;
+                  } else {
+                    y = zeroY;
+                    height = yVal - zeroY;
+                    isPositive = false;
+                  }
+
+                  return { x, y, height, val, date: t.date, isPositive };
+                });
+
+                return (
+                  <div className="mt-5 border border-slate-100 rounded-xl p-3 bg-slate-50/50 relative">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bar Chart (Cashflow Trend)</span>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">7 Days</span>
+                    </div>
+
+                    <div className="relative w-full h-[110px]">
+                      <svg 
+                        viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
+                        className="w-full h-full overflow-visible"
+                        preserveAspectRatio="none"
+                      >
+                        {/* Zero Line */}
+                        <line 
+                          x1={paddingLeft} 
+                          y1={zeroY} 
+                          x2={svgWidth - paddingRight} 
+                          y2={zeroY} 
+                          stroke="#cbd5e1" 
+                          strokeWidth="1.5"
+                        />
+
+                        {/* Bars */}
+                        {chartBars.map((bar, idx) => (
+                          <g key={idx}>
+                            {/* Interactive Bar Catcher */}
+                            <rect
+                              x={paddingLeft + (idx * colWidth)}
+                              y={paddingTop}
+                              width={colWidth}
+                              height={svgHeight - paddingTop - paddingBottom}
+                              fill="transparent"
+                              className="cursor-pointer"
+                              onMouseEnter={() => setHoveredPoint({ ...bar, index: idx })}
+                              onMouseLeave={() => setHoveredPoint(null)}
+                            />
+                            {/* Visual Bar */}
+                            <rect
+                              x={bar.x}
+                              y={bar.y}
+                              width={barWidth}
+                              height={Math.max(bar.height, 2)}
+                              rx="2"
+                              fill={bar.isPositive ? "#10b981" : "#f43f5e"}
+                              className="pointer-events-none transition-all duration-150"
+                              opacity={hoveredPoint?.index === idx ? "0.9" : "0.75"}
+                            />
+                          </g>
+                        ))}
+
+                        {/* X-Axis labels */}
+                        {chartBars.map((bar, idx) => {
+                          const dateObj = new Date(bar.date);
+                          const label = dateObj.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+                          return (
+                            <text
+                              key={idx}
+                              x={bar.x + barWidth / 2}
+                              y={svgHeight - 6}
+                              textAnchor="middle"
+                              className="text-[8px] font-bold text-slate-400 fill-current font-sans"
+                            >
+                              {label}
+                            </text>
+                          );
+                        })}
+
+                        {/* Y-Axis Min/Max labels */}
+                        <text
+                          x={paddingLeft - 8}
+                          y={paddingTop + 6}
+                          textAnchor="end"
+                          className="text-[8px] font-extrabold text-slate-400 fill-current font-sans"
+                        >
+                          ৳{Math.round(maxVal)}
+                        </text>
+                        <text
+                          x={paddingLeft - 8}
+                          y={svgHeight - paddingBottom}
+                          textAnchor="end"
+                          className="text-[8px] font-extrabold text-slate-400 fill-current font-sans"
+                        >
+                          ৳{Math.round(minVal)}
+                        </text>
+                      </svg>
+
+                      {/* Tooltip */}
+                      {hoveredPoint && (
+                        <div
+                          className="absolute bg-slate-900/95 backdrop-blur-md text-white rounded-lg p-2 shadow-lg border border-slate-700 pointer-events-none text-[10px] flex flex-col space-y-0.5 transition-all duration-75 z-10"
+                          style={{
+                            left: `${((hoveredPoint.x + barWidth / 2) / svgWidth) * 100}%`,
+                            top: `${(hoveredPoint.y / svgHeight) * 100 - 5}%`,
+                            transform: 'translate(-50%, -100%)'
+                          }}
+                        >
+                          <span className="font-semibold text-slate-400">
+                            {new Date(hoveredPoint.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                          </span>
+                          <span className="font-extrabold text-white">
+                            Flow: ৳{parseFloat(hoveredPoint.val).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/50 rounded-xl p-3 text-xs text-slate-500">
                 <span className="font-bold text-slate-700 block mb-0.5">What is Cashflow Basis?</span>
                 Reflects cash flow liquidity by subtracting the actual *buying cost* of all stocked products purchased during this period and wastage write-offs. Indicates the physical cash status of your shop.
@@ -437,6 +742,219 @@ export default function TotalRevenue() {
             </div>
 
           </div>
+
+          {/* Slices Visualization Grid (Doughnut & Pie Charts) */}
+          {(() => {
+            if (!revenueData) return null;
+
+            const sales = parseFloat(revenueData.sales_revenue || 0);
+            const cogs = parseFloat(revenueData.cost_of_goods_sold || 0);
+            const other = parseFloat(revenueData.other_costs || 0);
+            const wastage = parseFloat(revenueData.wastage_loss || 0);
+            const profit = parseFloat(revenueData.net_profit_cogs || 0);
+            
+            const totalExpenses = cogs + other + wastage;
+            const tradingRevenueTotal = Math.max(sales, cogs + other + wastage + (profit > 0 ? profit : 0), 1);
+
+            // Pie Chart Slices (Revenue Breakdown)
+            const pieSlices = [
+              { label: 'Net Trading Profit', val: profit > 0 ? profit : 0, color: '#10b981' },
+              { label: 'Cost of Goods Sold (COGS)', val: cogs, color: '#6366f1' },
+              { label: 'Other Costs', val: other, color: '#f59e0b' },
+              { label: 'Wastage Loss', val: wastage, color: '#f43f5e' }
+            ].filter(s => s.val > 0);
+
+            const totalPieVal = pieSlices.reduce((sum, s) => sum + s.val, 0) || 1;
+            pieSlices.forEach(s => s.percent = s.val / totalPieVal);
+
+            // Doughnut Chart Slices (Expense Breakdown)
+            const doughnutSlices = [
+              { label: 'Cost of Goods (COGS)', val: cogs, color: '#6366f1' },
+              { label: 'Other Costs', val: other, color: '#f59e0b' },
+              { label: 'Wastage Loss', val: wastage, color: '#f43f5e' }
+            ].filter(s => s.val > 0);
+
+            const totalDoughnutVal = doughnutSlices.reduce((sum, s) => sum + s.val, 0) || 1;
+            doughnutSlices.forEach(s => s.percent = s.val / totalDoughnutVal);
+
+            // Path generator helper
+            const getCoordinatesForPercent = (percent) => {
+              const x = Math.cos(2 * Math.PI * (percent - 0.25));
+              const y = Math.sin(2 * Math.PI * (percent - 0.25));
+              return [x, y];
+            };
+
+            const renderPiePath = (slices, cx, cy, r, chartKey) => {
+              let cumulativePercent = 0;
+              return slices.map((slice, idx) => {
+                if (slice.percent >= 0.999) {
+                  return (
+                    <circle
+                      key={idx}
+                      cx={cx}
+                      cy={cy}
+                      r={r}
+                      fill={slice.color}
+                      className="cursor-pointer transition-all duration-150 hover:opacity-90"
+                      onMouseEnter={() => setHoveredSlice({ chart: chartKey, index: idx, ...slice })}
+                      onMouseLeave={() => setHoveredSlice(null)}
+                    />
+                  );
+                }
+
+                const startPercent = cumulativePercent;
+                cumulativePercent += slice.percent;
+
+                const [startX, startY] = getCoordinatesForPercent(startPercent);
+                const [endX, endY] = getCoordinatesForPercent(cumulativePercent);
+
+                const x1 = cx + startX * r;
+                const y1 = cy + startY * r;
+                const x2 = cx + endX * r;
+                const y2 = cy + endY * r;
+
+                const largeArcFlag = slice.percent > 0.5 ? 1 : 0;
+                const pathData = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+
+                const isHovered = hoveredSlice?.chart === chartKey && hoveredSlice?.index === idx;
+
+                return (
+                  <path
+                    key={idx}
+                    d={pathData}
+                    fill={slice.color}
+                    opacity={isHovered ? '0.9' : '1'}
+                    className="cursor-pointer transition-all duration-150 hover:scale-[1.02] origin-center"
+                    style={{ transformOrigin: `${cx}px ${cy}px` }}
+                    onMouseEnter={() => setHoveredSlice({ chart: chartKey, index: idx, ...slice })}
+                    onMouseLeave={() => setHoveredSlice(null)}
+                  />
+                );
+              });
+            };
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* 1. Revenues vs Costs Structure (Pie Chart) */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base mb-1">Trading Revenue Structure</h3>
+                    <p className="text-xs text-slate-450 mb-6">Distribution breakdown of incoming gross sales revenue</p>
+                    
+                    <div className="flex flex-col sm:flex-row items-center justify-around gap-6">
+                      {/* SVG Canvas */}
+                      <div className="relative w-36 h-36 shrink-0">
+                        <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
+                          {pieSlices.length === 0 ? (
+                            <circle cx="100" cy="100" r="80" fill="#f1f5f9" />
+                          ) : (
+                            renderPiePath(pieSlices, 100, 100, 80, 'pie')
+                          )}
+                        </svg>
+                      </div>
+
+                      {/* Legends */}
+                      <div className="flex-1 space-y-2 w-full">
+                        {pieSlices.length === 0 ? (
+                          <div className="text-xs text-slate-400 italic">No revenue structure to display.</div>
+                        ) : (
+                          pieSlices.map((slice, idx) => {
+                            const isHovered = hoveredSlice?.chart === 'pie' && hoveredSlice?.index === idx;
+                            return (
+                              <div 
+                                key={idx} 
+                                className={`flex justify-between items-center text-xs p-1.5 rounded-lg transition-colors ${
+                                  isHovered ? 'bg-slate-50' : ''
+                                }`}
+                                onMouseEnter={() => setHoveredSlice({ chart: 'pie', index: idx, ...slice })}
+                                onMouseLeave={() => setHoveredSlice(null)}
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: slice.color }}></span>
+                                  <span className={`font-medium ${isHovered ? 'text-slate-800 font-bold' : 'text-slate-600'}`}>{slice.label}</span>
+                                </div>
+                                <span className="font-bold text-slate-855">{(slice.percent * 100).toFixed(1)}%</span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {hoveredSlice?.chart === 'pie' && (
+                    <div className="mt-4 p-2 bg-indigo-50/40 border border-indigo-100/50 rounded-xl text-center text-xs">
+                      <span className="font-semibold text-slate-500">{hoveredSlice.label}:</span>{' '}
+                      <span className="font-extrabold text-indigo-700">{formatCurrency(hoveredSlice.val)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Expenses Allocation Breakdown (Doughnut Chart) */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base mb-1">Expenses Allocation</h3>
+                    <p className="text-xs text-slate-450 mb-6">Split of active outgoing cost accounts and damage write-offs</p>
+                    
+                    <div className="flex flex-col sm:flex-row items-center justify-around gap-6">
+                      {/* SVG Canvas */}
+                      <div className="relative w-36 h-36 shrink-0">
+                        <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
+                          {doughnutSlices.length === 0 ? (
+                            <circle cx="100" cy="100" r="80" fill="#f1f5f9" />
+                          ) : (
+                            <>
+                              {renderPiePath(doughnutSlices, 100, 100, 80, 'doughnut')}
+                              {/* Inner Doughnut hole */}
+                              <circle cx="100" cy="100" r="50" fill="#ffffff" />
+                              <text x="100" y="96" textAnchor="middle" className="text-[9px] font-bold text-slate-400 fill-current uppercase tracking-wider font-sans">Total Spent</text>
+                              <text x="100" y="112" textAnchor="middle" className="text-[11px] font-black text-slate-700 fill-current font-sans">৳{Math.round(totalExpenses)}</text>
+                            </>
+                          )}
+                        </svg>
+                      </div>
+
+                      {/* Legends */}
+                      <div className="flex-1 space-y-2 w-full">
+                        {doughnutSlices.length === 0 ? (
+                          <div className="text-xs text-slate-400 italic">No expenses recorded to display.</div>
+                        ) : (
+                          doughnutSlices.map((slice, idx) => {
+                            const isHovered = hoveredSlice?.chart === 'doughnut' && hoveredSlice?.index === idx;
+                            return (
+                              <div 
+                                key={idx} 
+                                className={`flex justify-between items-center text-xs p-1.5 rounded-lg transition-colors ${
+                                  isHovered ? 'bg-slate-50' : ''
+                                }`}
+                                onMouseEnter={() => setHoveredSlice({ chart: 'doughnut', index: idx, ...slice })}
+                                onMouseLeave={() => setHoveredSlice(null)}
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: slice.color }}></span>
+                                  <span className={`font-medium ${isHovered ? 'text-slate-800 font-bold' : 'text-slate-600'}`}>{slice.label}</span>
+                                </div>
+                                <span className="font-bold text-slate-855">{(slice.percent * 100).toFixed(1)}%</span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {hoveredSlice?.chart === 'doughnut' && (
+                    <div className="mt-4 p-2 bg-rose-50/40 border border-rose-100/50 rounded-xl text-center text-xs">
+                      <span className="font-semibold text-slate-500">{hoveredSlice.label}:</span>{' '}
+                      <span className="font-extrabold text-rose-700">{formatCurrency(hoveredSlice.val)}</span>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            );
+          })()}
 
           {/* Ledger Table Container */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">

@@ -10,6 +10,8 @@ export default function SalesHistory() {
   const [endDate, setEndDate] = useState('');
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [chartType, setChartType] = useState('revenue'); // 'revenue' or 'sales'
+  const [hoveredPoint, setHoveredPoint] = useState(null);
   
   // Modal viewer state
   const [selectedSale, setSelectedSale] = useState(null);
@@ -209,6 +211,194 @@ export default function SalesHistory() {
           </div>
         </div>
       </div>
+
+      {/* Dynamic Graph Chart */}
+      {(() => {
+        // Calculate dynamic trend data from the current loaded sales
+        const trendMap = {};
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          trendMap[dateStr] = { date: dateStr, revenue: 0, count: 0 };
+        }
+
+        sales.forEach(sale => {
+          const dateStr = new Date(sale.created_at).toISOString().split('T')[0];
+          if (trendMap[dateStr]) {
+            trendMap[dateStr].revenue += parseFloat(sale.final_amount || 0);
+            trendMap[dateStr].count += 1;
+          }
+        });
+
+        const chartData = Object.values(trendMap);
+        const chartValues = chartData.map(d => chartType === 'revenue' ? d.revenue : d.count);
+        const maxVal = Math.max(...chartValues, 5);
+
+        return (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs relative">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Sales Transactions Trend</h3>
+                <p className="text-xs text-slate-500">Chronological summary of successful sales volume and transaction count</p>
+              </div>
+              
+              <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 self-end sm:self-auto">
+                <button
+                  onClick={() => setChartType('revenue')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    chartType === 'revenue'
+                      ? 'bg-white text-indigo-650 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Revenue (৳)
+                </button>
+                <button
+                  onClick={() => setChartType('sales')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    chartType === 'sales'
+                      ? 'bg-white text-indigo-650 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Sales Volume
+                </button>
+              </div>
+            </div>
+
+            <div className="relative w-full h-[180px]">
+              {/* SVG Plot */}
+              <svg 
+                viewBox="0 0 600 180" 
+                className="w-full h-full overflow-visible"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id="salesAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#818cf8" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#818cf8" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Grid Lines */}
+                {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                  const y = 15 + (1 - ratio) * 125;
+                  const labelVal = ratio * maxVal;
+                  return (
+                    <g key={idx}>
+                      <line 
+                        x1={55} 
+                        y1={y} 
+                        x2={575} 
+                        y2={y} 
+                        stroke="#f1f5f9" 
+                        strokeWidth="1.5"
+                      />
+                      <text 
+                        x={43} 
+                        y={y + 4} 
+                        textAnchor="end" 
+                        className="text-[10px] font-bold text-slate-400 fill-current font-sans"
+                      >
+                        {chartType === 'revenue' ? `৳${Math.round(labelVal)}` : Math.round(labelVal)}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Path Logic */}
+                {(() => {
+                  const chartPoints = chartData.map((d, index) => {
+                    const val = chartType === 'revenue' ? d.revenue : d.count;
+                    const x = 55 + (index * (600 - 55 - 25) / 6);
+                    const y = 140 - ((val / maxVal) * 125);
+                    return { x, y, val, date: d.date };
+                  });
+
+                  const linePath = chartPoints.reduce((path, pt, i) => {
+                    return path + (i === 0 ? `M ${pt.x} ${pt.y}` : ` L ${pt.x} ${pt.y}`);
+                  }, '');
+
+                  const areaPath = `${linePath} L ${chartPoints[chartPoints.length - 1].x} 140 L ${chartPoints[0].x} 140 Z`;
+
+                  return (
+                    <>
+                      <path d={areaPath} fill="url(#salesAreaGradient)" />
+                      <path 
+                        d={linePath} 
+                        fill="none" 
+                        stroke="#6366f1" 
+                        strokeWidth="2.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                      />
+
+                      {chartPoints.map((pt, idx) => (
+                        <g key={idx}>
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r="15"
+                            fill="transparent"
+                            className="cursor-pointer"
+                            onMouseEnter={() => setHoveredPoint({ ...pt, index: idx })}
+                            onMouseLeave={() => setHoveredPoint(null)}
+                          />
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={hoveredPoint?.index === idx ? "5" : "3.5"}
+                            fill={hoveredPoint?.index === idx ? "#6366f1" : "#ffffff"}
+                            stroke="#6366f1"
+                            strokeWidth={hoveredPoint?.index === idx ? "2.5" : "1.5"}
+                            className="pointer-events-none transition-all duration-150"
+                          />
+                        </g>
+                      ))}
+
+                      {chartPoints.map((pt, idx) => {
+                        const dateObj = new Date(pt.date);
+                        const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        return (
+                          <text
+                            key={idx}
+                            x={pt.x}
+                            y={160}
+                            textAnchor="middle"
+                            className="text-[10px] font-bold text-slate-400 fill-current font-sans"
+                          >
+                            {label}
+                          </text>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
+              </svg>
+
+              {/* Tooltip */}
+              {hoveredPoint && (
+                <div
+                  className="absolute bg-slate-900/95 backdrop-blur-md text-white rounded-xl p-2.5 shadow-xl border border-slate-700 pointer-events-none text-xs flex flex-col space-y-0.5 transition-all duration-75 z-10"
+                  style={{
+                    left: `${(hoveredPoint.x / 600) * 100}%`,
+                    top: `${(hoveredPoint.y / 180) * 100 - 5}%`,
+                    transform: 'translate(-50%, -100%)'
+                  }}
+                >
+                  <span className="font-semibold text-slate-400">
+                    {new Date(hoveredPoint.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                  <span className="font-extrabold text-white text-sm">
+                    {chartType === 'revenue' ? `Revenue: ৳${parseFloat(hoveredPoint.val).toFixed(2)}` : `Sales: ${hoveredPoint.val}`}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Sales Logs Table */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">

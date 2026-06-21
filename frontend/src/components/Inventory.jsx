@@ -14,6 +14,7 @@ export default function Inventory() {
   const [expiryFilter, setExpiryFilter] = useState(false);
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
   const [shops, setShops] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState('');
  
@@ -379,6 +380,141 @@ export default function Inventory() {
         </div>
       </div>
  
+      {/* Dynamic Graph Chart */}
+      {(() => {
+        // Take the top 7 products by stock quantity to display in the bar chart
+        const topProducts = [...products]
+          .sort((a, b) => b.stock_quantity - a.stock_quantity)
+          .slice(0, 7);
+
+        const maxVal = Math.max(...topProducts.map(p => p.stock_quantity), 10);
+
+        return (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs relative">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Stock Levels distribution</h3>
+              <p className="text-xs text-slate-500">Visualization of the top products by currently available stock quantities</p>
+            </div>
+
+            {topProducts.length === 0 ? (
+              <div className="h-44 flex items-center justify-center text-slate-400 text-sm">
+                No inventory items to display.
+              </div>
+            ) : (
+              <div className="relative w-full h-[180px] mt-4">
+                {/* SVG Plot */}
+                <svg 
+                  viewBox="0 0 600 180" 
+                  className="w-full h-full overflow-visible"
+                  preserveAspectRatio="none"
+                >
+                  {/* Grid Lines */}
+                  {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                    const y = 15 + (1 - ratio) * 120;
+                    const labelVal = ratio * maxVal;
+                    return (
+                      <g key={idx}>
+                        <line 
+                          x1={60} 
+                          y1={y} 
+                          x2={580} 
+                          y2={y} 
+                          stroke="#f1f5f9" 
+                          strokeWidth="1.5"
+                        />
+                        <text 
+                          x={48} 
+                          y={y + 4} 
+                          textAnchor="end" 
+                          className="text-[10px] font-bold text-slate-400 fill-current font-sans"
+                        >
+                          {Math.round(labelVal)}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Bars */}
+                  {(() => {
+                    const chartWidth = 600;
+                    const chartHeight = 180;
+                    const paddingLeft = 60;
+                    const paddingRight = 20;
+                    const barWidth = 35;
+                    const availableWidth = chartWidth - paddingLeft - paddingRight;
+                    const colWidth = availableWidth / topProducts.length;
+
+                    return topProducts.map((prod, idx) => {
+                      const val = prod.stock_quantity;
+                      const x = paddingLeft + (idx * colWidth) + (colWidth - barWidth) / 2;
+                      const y = 135 - ((val / maxVal) * 120);
+                      const height = 135 - y;
+
+                      return (
+                        <g key={prod.id}>
+                          {/* Interactive Bar Hover Catcher */}
+                          <rect
+                            x={paddingLeft + (idx * colWidth)}
+                            y={15}
+                            width={colWidth}
+                            height={120}
+                            fill="transparent"
+                            className="cursor-pointer"
+                            onMouseEnter={() => setHoveredPoint({ ...prod, x: x + barWidth / 2, y, val })}
+                            onMouseLeave={() => setHoveredPoint(null)}
+                          />
+                          {/* Styled Visual Bar */}
+                          <rect
+                            x={x}
+                            y={y}
+                            width={barWidth}
+                            height={height}
+                            rx="4"
+                            fill={hoveredPoint?.id === prod.id ? "#4f46e5" : "#818cf8"}
+                            className="transition-all duration-150 pointer-events-none"
+                          />
+                          {/* Shortened Label */}
+                          <text
+                            x={x + barWidth / 2}
+                            y={155}
+                            textAnchor="middle"
+                            className="text-[10px] font-bold text-slate-400 fill-current font-sans"
+                          >
+                            {prod.name.length > 10 ? `${prod.name.slice(0, 8)}..` : prod.name}
+                          </text>
+                        </g>
+                      );
+                    });
+                  })()}
+                </svg>
+
+                {/* Tooltip */}
+                {hoveredPoint && (
+                  <div
+                    className="absolute bg-slate-900/95 backdrop-blur-md text-white rounded-xl p-2.5 shadow-xl border border-slate-700 pointer-events-none text-xs flex flex-col space-y-0.5 transition-all duration-75 z-10"
+                    style={{
+                      left: `${(hoveredPoint.x / 600) * 100}%`,
+                      top: `${(hoveredPoint.y / 180) * 100 - 5}%`,
+                      transform: 'translate(-50%, -100%)'
+                    }}
+                  >
+                    <span className="font-semibold text-slate-200">
+                      {hoveredPoint.name}
+                    </span>
+                    <span className="font-semibold text-slate-400">
+                      SKU: {hoveredPoint.sku}
+                    </span>
+                    <span className="font-extrabold text-white text-sm">
+                      Stock: {hoveredPoint.val} units
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Inventory Table Container */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
