@@ -149,7 +149,8 @@ export default function App() {
                 shop_name: shopData.name,
                 shop_email: shopData.email,
                 shop_phone: shopData.phone,
-                shop_address: shopData.address
+                shop_address: shopData.address,
+                logo: shopData.logo
               };
               localStorage.setItem('user', JSON.stringify(updated));
               return updated;

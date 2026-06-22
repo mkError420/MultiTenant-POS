@@ -51,7 +51,8 @@ export default function Settings() {
           address: data.address || '',
           tax_rate: data.tax_rate !== undefined ? data.tax_rate : '10.00',
           password: '',
-          confirmPassword: ''
+          confirmPassword: '',
+          logo: data.logo || ''
         });
       }
     } catch (err) {
@@ -149,7 +150,7 @@ export default function Settings() {
       
       const bodyData = isSuperAdmin 
         ? { name: formData.name, email: formData.email, password: formData.password || undefined, logo: formData.logo }
-        : { name: formData.name, email: formData.email, phone: formData.phone, address: formData.address, tax_rate: formData.tax_rate };
+        : { name: formData.name, email: formData.email, phone: formData.phone, address: formData.address, tax_rate: formData.tax_rate, logo: formData.logo };
 
       const response = await fetch(url, {
         method: 'PUT',
@@ -245,7 +246,7 @@ export default function Settings() {
             />
           </div>
 
-          {!isSuperAdmin ? (
+          {!isSuperAdmin && (
             <>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -292,54 +293,57 @@ export default function Settings() {
                 />
               </div>
             </>
-          ) : (
-            <>
-              <div className="border-t border-slate-100 pt-4">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Brand Logo
-                </label>
-                <div className="mt-2 flex items-center space-x-5">
-                  {formData.logo ? (
-                    <img
-                      src={formData.logo}
-                      alt="Brand Logo Preview"
-                      className="w-16 h-16 rounded-xl object-contain bg-slate-900 border border-slate-200"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center text-slate-400 font-bold text-xs uppercase shrink-0">
-                      No Logo
-                    </div>
-                  )}
-                  <div className="flex flex-col space-y-2">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      id="logo-upload-input"
-                      onChange={handleLogoChange}
-                      className="hidden"
-                    />
-                    <div className="flex space-x-2">
-                      <label
-                        htmlFor="logo-upload-input"
-                        className="cursor-pointer bg-white hover:bg-slate-50 text-slate-700 font-semibold py-2 px-4 border border-slate-200 rounded-xl text-xs shadow-xs transition-colors"
-                      >
-                        Choose Image
-                      </label>
-                      {formData.logo && (
-                        <button
-                          type="button"
-                          onClick={handleRemoveLogo}
-                          className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold py-2 px-4 border border-rose-200 rounded-xl text-xs transition-colors"
-                        >
-                          Remove Logo
-                        </button>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-slate-450">PNG, JPG, or SVG. Max size 2MB.</span>
-                  </div>
-                </div>
-              </div>
+          )}
 
+          {/* Unified Brand Logo Upload Section */}
+          <div className="border-t border-slate-100 pt-4">
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Brand Logo
+            </label>
+            <div className="mt-2 flex items-center space-x-5">
+              {formData.logo ? (
+                <img
+                  src={formData.logo}
+                  alt="Brand Logo Preview"
+                  className="w-16 h-16 rounded-xl object-contain bg-slate-900 border border-slate-200"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center text-slate-400 font-bold text-xs uppercase shrink-0">
+                  No Logo
+                </div>
+              )}
+              <div className="flex flex-col space-y-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="logo-upload-input"
+                  onChange={handleLogoChange}
+                  className="hidden"
+                />
+                <div className="flex space-x-2">
+                  <label
+                    htmlFor="logo-upload-input"
+                    className="cursor-pointer bg-white hover:bg-slate-50 text-slate-700 font-semibold py-2 px-4 border border-slate-200 rounded-xl text-xs shadow-xs transition-colors"
+                  >
+                    Choose Image
+                  </label>
+                  {formData.logo && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold py-2 px-4 border border-rose-200 rounded-xl text-xs transition-colors"
+                    >
+                      Remove Logo
+                    </button>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-450">PNG, JPG, or SVG. Max size 2MB.</span>
+              </div>
+            </div>
+          </div>
+
+          {isSuperAdmin && (
+            <>
               <div className="border-t border-slate-100 pt-4">
                 <h3 className="text-sm font-semibold text-slate-800 mb-1">Change Password</h3>
                 <p className="text-xs text-slate-400 mb-4">Leave blank if you do not want to change your password.</p>

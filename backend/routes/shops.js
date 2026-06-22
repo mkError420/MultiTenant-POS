@@ -32,7 +32,7 @@ router.get('/my-shop', enforceTenant, authorize(['shop_admin', 'shop_staff']), a
   const shopId = req.shopId;
   try {
     const [shops] = await db.query(
-      'SELECT id, name, email, phone, address, tax_rate, status, created_at FROM shops WHERE id = ?',
+      'SELECT id, name, email, phone, address, tax_rate, logo, status, created_at FROM shops WHERE id = ?',
       [shopId]
     );
 
@@ -60,7 +60,7 @@ router.get('/my-shop', enforceTenant, authorize(['shop_admin', 'shop_staff']), a
  */
 router.put('/my-shop', enforceTenant, authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
-  const { name, email, phone, address, tax_rate } = req.body;
+  const { name, email, phone, address, tax_rate, logo } = req.body;
 
   if (!name || !email) {
     return res.status(400).json({ error: 'Shop name and email are required.' });
@@ -81,9 +81,19 @@ router.put('/my-shop', enforceTenant, authorize(['shop_admin']), async (req, res
       return res.status(400).json({ error: 'Another shop is already registered with this email.' });
     }
 
+    const updateFields = ['name = ?', 'email = ?', 'phone = ?', 'address = ?', 'tax_rate = ?'];
+    const queryParams = [name, email, phone || null, address || null, taxRateVal];
+
+    if (logo !== undefined) {
+      updateFields.push('logo = ?');
+      queryParams.push(logo === '' ? null : logo);
+    }
+
+    queryParams.push(shopId);
+
     await db.query(
-      'UPDATE shops SET name = ?, email = ?, phone = ?, address = ?, tax_rate = ? WHERE id = ?',
-      [name, email, phone || null, address || null, taxRateVal, shopId]
+      `UPDATE shops SET ${updateFields.join(', ')} WHERE id = ?`,
+      queryParams
     );
 
     res.json({ message: 'Shop details updated successfully.' });

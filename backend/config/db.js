@@ -112,6 +112,13 @@ const pool = mysql.createPool({
       await connection.query("ALTER TABLE `users` ADD COLUMN `logo` LONGTEXT NULL");
       console.log("Migration: Added 'logo' column to 'users' table.");
     }
+
+    // Check if logo column exists on shops table
+    const [shopLogoColumns] = await connection.query("SHOW COLUMNS FROM `shops` LIKE 'logo'");
+    if (shopLogoColumns.length === 0) {
+      await connection.query("ALTER TABLE `shops` ADD COLUMN `logo` LONGTEXT NULL");
+      console.log("Migration: Added 'logo' column to 'shops' table.");
+    }
     
     connection.release();
   } catch (error) {
