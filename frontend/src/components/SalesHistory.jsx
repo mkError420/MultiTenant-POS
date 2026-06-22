@@ -5,6 +5,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function SalesHistory() {
   const [sales, setSales] = useState([]);
+  const [heldBills, setHeldBills] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,21 @@ export default function SalesHistory() {
     }
   };
 
+  const fetchHeldBills = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/held-bills`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setHeldBills(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch held bills in sales history', e);
+    }
+  };
+
   const fetchSaleDetails = async (saleId) => {
     setDetailsLoading(true);
     try {
@@ -77,6 +93,7 @@ export default function SalesHistory() {
   useEffect(() => {
     setCurrentPage(1);
     fetchSales();
+    fetchHeldBills();
   }, [startDate, endDate]);
 
   useEffect(() => {
@@ -113,6 +130,7 @@ export default function SalesHistory() {
 
       // Refresh sales list (totals auto-adjust)
       fetchSales();
+      fetchHeldBills();
     } catch (err) {
       triggerAlert('error', err.message);
     }
@@ -133,8 +151,13 @@ export default function SalesHistory() {
 
   const totalSalesCount = filteredSales.length;
   const totalRevenue = filteredSales.reduce((sum, s) => sum + parseFloat(s.final_amount || 0), 0);
-  const totalPaid = filteredSales.reduce((sum, s) => sum + parseFloat(s.paid_amount !== undefined ? s.paid_amount : s.final_amount || 0), 0);
-  const totalDue = filteredSales.reduce((sum, s) => sum + parseFloat(s.due_amount || 0), 0);
+  const totalPaid = filteredSales.reduce((sum, s) => {
+    const val = s.paid_amount !== null && s.paid_amount !== undefined ? s.paid_amount : (s.final_amount || 0);
+    return sum + parseFloat(val || 0);
+  }, 0);
+  const totalDue = heldBills
+    .filter(b => b.status === 'held' && parseFloat(b.due_amount || 0) > 0)
+    .reduce((sum, b) => sum + parseFloat(b.due_amount || 0), 0);
 
   const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
   const indexOfLastSale = currentPage * itemsPerPage;
@@ -486,13 +509,13 @@ export default function SalesHistory() {
                     <td className="p-4 text-right font-extrabold text-indigo-600">৳{parseFloat(sale.final_amount).toFixed(2)}</td>
                     <td className="p-4 text-right">
                       <span className="text-emerald-700 font-bold text-xs">
-                        ৳{parseFloat(sale.paid_amount !== undefined ? sale.paid_amount : sale.final_amount).toFixed(2)}
+                        ৳{parseFloat(sale.paid_amount !== null && sale.paid_amount !== undefined ? sale.paid_amount : sale.final_amount || 0).toFixed(2)}
                       </span>
                     </td>
                     <td className="p-4 text-right">
                       {parseFloat(sale.due_amount || 0) > 0 ? (
                         <span className="bg-rose-50 text-rose-700 text-xs font-bold px-2 py-0.5 rounded-lg border border-rose-100">
-                          ৳{parseFloat(sale.due_amount).toFixed(2)}
+                          ৳{parseFloat(sale.due_amount || 0).toFixed(2)}
                         </span>
                       ) : (
                         <span className="bg-emerald-50 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-lg border border-emerald-100">

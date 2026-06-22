@@ -644,6 +644,22 @@ router.get('/:id/profile', async (req, res) => {
       [supplierId, shopId]
     );
 
+    const [expiredProducts] = await db.query(
+      `SELECT * FROM products 
+       WHERE supplier_id = ? AND shop_id = ? AND expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE() AND stock_quantity > 0
+       ORDER BY name ASC`,
+      [supplierId, shopId]
+    );
+
+    const [returnsHistory] = await db.query(
+      `SELECT sr.*, p.name AS product_name, p.sku AS product_sku
+       FROM supplier_returns sr
+       JOIN products p ON sr.product_id = p.id
+       WHERE sr.supplier_id = ? AND sr.shop_id = ?
+       ORDER BY sr.created_at DESC`,
+      [supplierId, shopId]
+    );
+
     res.json({
       supplier,
       stats: {
@@ -651,7 +667,9 @@ router.get('/:id/profile', async (req, res) => {
         poStats
       },
       purchaseOrders: pos,
-      costLogs
+      costLogs,
+      expiredProducts,
+      returnsHistory
     });
 
   } catch (error) {
@@ -790,6 +808,99 @@ router.put('/purchase-orders/:id/pay', authorize(['shop_admin']), async (req, re
     await conn.rollback();
     console.error('Record PO payment error:', error);
     res.status(500).json({ error: 'Server error recording payment.' });
+  } finally {
+    conn.release();
+  }
+});
+
+/**
+ * @route   POST /api/suppliers/:id/returns
+ * @desc    Record an expired product return or replacement to the supplier
+ * @access  Private (shop_admin)
+ */
+router.post('/:id/returns', authorize(['shop_admin']), async (req, res) => {
+  const shopId = req.shopId;
+  const supplierId = req.params.id;
+  const { product_id, quantity, action_type, new_expiry_date, notes } = req.body;
+
+  const qty = parseInt(quantity);
+  if (!product_id || isNaN(qty) || qty <= 0 || !action_type) {
+    return res.status(400).json({ error: 'Product ID, valid positive quantity, and action type are required.' });
+  }
+
+  if (action_type !== 'return' && action_type !== 'replace') {
+    return res.status(400).json({ error: 'Invalid action type. Must be return or replace.' });
+  }
+
+  if (action_type === 'replace' && !new_expiry_date) {
+    return res.status(400).json({ error: 'New expiry date is required for product replacement.' });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1. Verify supplier exists and belongs to this shop
+    const [supplierRows] = await conn.query(
+      'SELECT id FROM suppliers WHERE id = ? AND shop_id = ?',
+      [supplierId, shopId]
+    );
+    if (supplierRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Supplier not found.' });
+    }
+
+    // 2. Verify product exists, belongs to this supplier, and belongs to this shop
+    const [productRows] = await conn.query(
+      'SELECT id, stock_quantity, name FROM products WHERE id = ? AND supplier_id = ? AND shop_id = ?',
+      [product_id, supplierId, shopId]
+    );
+    if (productRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Product not found under this supplier.' });
+    }
+
+    const product = productRows[0];
+
+    if (action_type === 'return') {
+      if (product.stock_quantity < qty) {
+        await conn.rollback();
+        return res.status(400).json({ error: `Insufficient stock to return. Current stock: ${product.stock_quantity}.` });
+      }
+
+      // Deduct stock
+      await conn.query(
+        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ? AND shop_id = ?',
+        [qty, product_id, shopId]
+      );
+    } else if (action_type === 'replace') {
+      // Validate date is in the future
+      const newExpDate = new Date(new_expiry_date);
+      if (isNaN(newExpDate.getTime()) || newExpDate <= new Date()) {
+        await conn.rollback();
+        return res.status(400).json({ error: 'New expiry date must be a valid future date.' });
+      }
+
+      // Update product expiry date
+      await conn.query(
+        'UPDATE products SET expiry_date = ? WHERE id = ? AND shop_id = ?',
+        [new_expiry_date, product_id, shopId]
+      );
+    }
+
+    // Log the transaction in supplier_returns
+    await conn.query(
+      `INSERT INTO supplier_returns (shop_id, supplier_id, product_id, quantity, action_type, notes, new_expiry_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [shopId, supplierId, product_id, qty, action_type, notes || null, action_type === 'replace' ? new_expiry_date : null]
+    );
+
+    await conn.commit();
+    res.json({ message: `Successfully completed product ${action_type} action.` });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Expired product action error:', error);
+    res.status(500).json({ error: 'Server error processing product action.' });
   } finally {
     conn.release();
   }

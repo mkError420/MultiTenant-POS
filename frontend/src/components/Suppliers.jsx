@@ -32,6 +32,13 @@ export default function Suppliers() {
   const [costLogs, setCostLogs] = useState([]);
   const [selectedPo, setSelectedPo] = useState(null);
 
+  // Return & Replace states
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [selectedExpiredProduct, setSelectedExpiredProduct] = useState(null);
+  const [returnFormData, setReturnFormData] = useState({ quantity: '', notes: '' });
+  const [replaceFormData, setReplaceFormData] = useState({ quantity: '', new_expiry_date: '', notes: '' });
+
   // Supplier basic form state
   const [formData, setFormData] = useState({
     name: '',
@@ -597,6 +604,77 @@ export default function Suppliers() {
     }
   };
 
+  const handleReturnSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedExpiredProduct || !returnFormData.quantity || parseInt(returnFormData.quantity) <= 0) {
+      triggerAlert('error', 'Please enter a valid quantity.');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/suppliers/${selectedSupplierId}/returns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          product_id: selectedExpiredProduct.id,
+          quantity: parseInt(returnFormData.quantity),
+          action_type: 'return',
+          notes: returnFormData.notes
+        })
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.error || 'Failed to complete return.');
+
+      triggerAlert('success', 'Product return processed successfully!');
+      setShowReturnModal(false);
+      setReturnFormData({ quantity: '', notes: '' });
+      setSelectedExpiredProduct(null);
+      loadProfileData(selectedSupplierId);
+      fetchProducts(); // Refresh products
+    } catch (err) {
+      triggerAlert('error', err.message);
+    }
+  };
+
+  const handleReplaceSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedExpiredProduct || !replaceFormData.quantity || parseInt(replaceFormData.quantity) <= 0 || !replaceFormData.new_expiry_date) {
+      triggerAlert('error', 'Please fill out all fields.');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/suppliers/${selectedSupplierId}/returns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          product_id: selectedExpiredProduct.id,
+          quantity: parseInt(replaceFormData.quantity),
+          action_type: 'replace',
+          new_expiry_date: replaceFormData.new_expiry_date,
+          notes: replaceFormData.notes
+        })
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.error || 'Failed to complete replacement.');
+
+      triggerAlert('success', 'Product replacement processed successfully!');
+      setShowReplaceModal(false);
+      setReplaceFormData({ quantity: '', new_expiry_date: '', notes: '' });
+      setSelectedExpiredProduct(null);
+      loadProfileData(selectedSupplierId);
+      fetchProducts(); // Refresh products
+    } catch (err) {
+      triggerAlert('error', err.message);
+    }
+  };
+
   // HELPER FORMATTERS
   const formatCurrency = (val) => `৳${parseFloat(val).toFixed(2)}`;
   const formatDate = (dateStr) => {
@@ -810,6 +888,16 @@ export default function Suppliers() {
             >
               Supplied Products ({uniqueProducts.length})
             </button>
+            <button
+              onClick={() => setProfileTab('expired_products')}
+              className={`px-6 py-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+                profileTab === 'expired_products'
+                  ? 'border-indigo-600 text-indigo-600 bg-white'
+                  : 'border-transparent text-slate-450 hover:text-slate-700'
+              }`}
+            >
+              Expired & Returns ({profileData.expiredProducts?.length || 0})
+            </button>
           </div>
 
           <div className="p-6">
@@ -997,6 +1085,115 @@ export default function Suppliers() {
                 </div>
               </div>
             )}
+
+            {profileTab === 'expired_products' && (
+              <div className="space-y-6">
+                <div>
+                  <h4 className="font-bold text-slate-700 text-sm mb-3">Expired Products from this Supplier</h4>
+                  <div className="overflow-x-auto border border-slate-100 rounded-xl">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                          <th className="p-3">SKU</th>
+                          <th className="p-3">Product Name</th>
+                          <th className="p-3">Expiry Date</th>
+                          <th className="p-3">Current Stock</th>
+                          <th className="p-3 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {!profileData.expiredProducts || profileData.expiredProducts.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="p-8 text-center text-slate-400">No expired products found from this vendor.</td>
+                          </tr>
+                        ) : (
+                          profileData.expiredProducts.map(p => (
+                            <tr key={p.id} className="hover:bg-slate-50/50">
+                              <td className="p-3 font-mono font-bold text-slate-500">{p.sku}</td>
+                              <td className="p-3 font-semibold text-slate-800">{p.name}</td>
+                              <td className="p-3">
+                                <span className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
+                                  {new Date(p.expiry_date).toLocaleDateString()}
+                                </span>
+                              </td>
+                              <td className="p-3 font-semibold">{p.stock_quantity} units</td>
+                              <td className="p-3 text-center space-x-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedExpiredProduct(p);
+                                    setReturnFormData({ quantity: String(p.stock_quantity), notes: '' });
+                                    setShowReturnModal(true);
+                                  }}
+                                  className="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold py-1 px-2.5 rounded border border-amber-200 transition-colors"
+                                >
+                                  Return to Supplier
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedExpiredProduct(p);
+                                    setReplaceFormData({ quantity: String(p.stock_quantity), new_expiry_date: '', notes: '' });
+                                    setShowReplaceModal(true);
+                                  }}
+                                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-1 px-2.5 rounded border border-emerald-200 transition-colors"
+                                >
+                                  Replace Product
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-slate-700 text-sm mb-3">Return & Replacement Log History</h4>
+                  <div className="overflow-x-auto border border-slate-100 rounded-xl">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                          <th className="p-3">Date</th>
+                          <th className="p-3">SKU</th>
+                          <th className="p-3">Product Name</th>
+                          <th className="p-3">Qty</th>
+                          <th className="p-3">Action Type</th>
+                          <th className="p-3">New Expiry Date</th>
+                          <th className="p-3">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {!profileData.returnsHistory || profileData.returnsHistory.length === 0 ? (
+                          <tr>
+                            <td colSpan="7" className="p-8 text-center text-slate-400">No returns or replacements history logged.</td>
+                          </tr>
+                        ) : (
+                          profileData.returnsHistory.map(log => (
+                            <tr key={log.id} className="hover:bg-slate-50/50">
+                              <td className="p-3 text-slate-650">{formatDate(log.created_at)}</td>
+                              <td className="p-3 font-mono text-slate-500 font-bold">{log.product_sku}</td>
+                              <td className="p-3 font-semibold text-slate-800">{log.product_name}</td>
+                              <td className="p-3 font-bold">{log.quantity}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                  log.action_type === 'return'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                }`}>
+                                  {log.action_type === 'return' ? 'Returned' : 'Replaced'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-650">{log.new_expiry_date ? new Date(log.new_expiry_date).toLocaleDateString() : '-'}</td>
+                              <td className="p-3 text-slate-600 italic">{log.notes || '-'}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1011,6 +1208,12 @@ export default function Suppliers() {
 
         {/* RENDER ADD PO MODAL */}
         {showAddPoModal && renderAddPoModal()}
+
+        {/* RENDER RETURN MODAL */}
+        {showReturnModal && renderReturnModal()}
+
+        {/* RENDER REPLACE MODAL */}
+        {showReplaceModal && renderReplaceModal()}
       </div>
     );
   }
@@ -1981,6 +2184,146 @@ export default function Suppliers() {
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors shadow"
               >
                 Confirm Receipt & Adjust Inventory
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // RETURN EXPIRED PRODUCT MODAL
+  function renderReturnModal() {
+    if (!selectedExpiredProduct) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+            <div>
+              <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Return to Supplier</span>
+              <h3 className="text-lg font-bold text-slate-800">{selectedExpiredProduct.name}</h3>
+            </div>
+            <button onClick={() => { setShowReturnModal(false); setSelectedExpiredProduct(null); }} className="text-slate-400 hover:text-slate-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form onSubmit={handleReturnSubmit} className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quantity to Return (Max {selectedExpiredProduct.stock_quantity}) *</label>
+              <input
+                type="number"
+                min="1"
+                max={selectedExpiredProduct.stock_quantity}
+                value={returnFormData.quantity}
+                onChange={(e) => setReturnFormData({ ...returnFormData, quantity: e.target.value })}
+                required
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes / Reason</label>
+              <textarea
+                value={returnFormData.notes}
+                onChange={(e) => setReturnFormData({ ...returnFormData, notes: e.target.value })}
+                placeholder="e.g. Expired batch return, requesting refund or credit"
+                rows="3"
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+              />
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => { setShowReturnModal(false); setSelectedExpiredProduct(null); }}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold transition-colors shadow"
+              >
+                Submit Return
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // REPLACE EXPIRED PRODUCT MODAL
+  function renderReplaceModal() {
+    if (!selectedExpiredProduct) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+            <div>
+              <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Replace Product</span>
+              <h3 className="text-lg font-bold text-slate-800">{selectedExpiredProduct.name}</h3>
+            </div>
+            <button onClick={() => { setShowReplaceModal(false); setSelectedExpiredProduct(null); }} className="text-slate-400 hover:text-slate-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form onSubmit={handleReplaceSubmit} className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quantity Replaced *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={replaceFormData.quantity}
+                  onChange={(e) => setReplaceFormData({ ...replaceFormData, quantity: e.target.value })}
+                  required
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">New Expiry Date *</label>
+                <input
+                  type="date"
+                  min={new Date().toISOString().split('T')[0]}
+                  value={replaceFormData.new_expiry_date}
+                  onChange={(e) => setReplaceFormData({ ...replaceFormData, new_expiry_date: e.target.value })}
+                  required
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes / Details</label>
+              <textarea
+                value={replaceFormData.notes}
+                onChange={(e) => setReplaceFormData({ ...replaceFormData, notes: e.target.value })}
+                placeholder="e.g. Replaced by supplier with new unexpired batch"
+                rows="3"
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+              />
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => { setShowReplaceModal(false); setSelectedExpiredProduct(null); }}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors shadow"
+              >
+                Confirm Replacement
               </button>
             </div>
           </form>

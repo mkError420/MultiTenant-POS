@@ -64,6 +64,26 @@ const pool = mysql.createPool({
       console.log("Migration: Added 'due_amount' column to 'purchase_orders' table.");
     }
     
+    // Create supplier_returns table if not exists
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`supplier_returns\` (
+        \`id\` INT AUTO_INCREMENT,
+        \`shop_id\` INT NOT NULL,
+        \`supplier_id\` INT NOT NULL,
+        \`product_id\` INT NOT NULL,
+        \`quantity\` INT NOT NULL,
+        \`action_type\` ENUM('return', 'replace') NOT NULL,
+        \`notes\` TEXT NULL,
+        \`new_expiry_date\` DATE NULL,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        CONSTRAINT \`fk_supplier_returns_shop\` FOREIGN KEY (\`shop_id\`) REFERENCES \`shops\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_supplier_returns_supplier\` FOREIGN KEY (\`supplier_id\`) REFERENCES \`suppliers\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_supplier_returns_product\` FOREIGN KEY (\`product_id\`) REFERENCES \`products\` (\`id\`) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    console.log("Migration: Verified and created 'supplier_returns' table.");
+    
     connection.release();
   } catch (error) {
     console.error('Database connection or migration failed:', error.message);

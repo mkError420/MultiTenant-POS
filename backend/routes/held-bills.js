@@ -260,18 +260,34 @@ router.post('/:id/pay-due', async (req, res) => {
       [newDue, newStatus, heldBillId, shopId]
     );
 
-    // 3. Reduce customer due_balance
+     // 3. Reduce customer due_balance
     await connection.query(
       'UPDATE customers SET due_balance = GREATEST(due_balance - ?, 0) WHERE id = ? AND shop_id = ?',
       [actualPayment, bill.customer_id, shopId]
     );
 
-    // 4. Record a sales transaction for the due payment
-    const note = `Due payment for Held Bill #${heldBillId}`;
+    // 4. Update the original sale due_amount to reflect the payment
+    let originalSaleId = null;
+    if (bill.notes && bill.notes.startsWith('Due from Sale #')) {
+      const match = bill.notes.match(/Due from Sale #(\d+)/);
+      if (match) {
+        originalSaleId = parseInt(match[1]);
+      }
+    }
+
+    if (originalSaleId) {
+      await connection.query(
+        'UPDATE sales SET due_amount = GREATEST(due_amount - ?, 0) WHERE id = ? AND shop_id = ?',
+        [actualPayment, originalSaleId, shopId]
+      );
+    }
+
+    // 5. Record a sales transaction for the due payment (final_amount = 0 to avoid double counting revenue, paid_amount = actualPayment to log cash inflow)
+    const note = `Due payment for Held Bill #${heldBillId}${originalSaleId ? ` (Sale #${originalSaleId})` : ''}`;
     await connection.query(
       `INSERT INTO sales (shop_id, customer_id, user_id, total_amount, discount, tax, final_amount, paid_amount, due_amount, payment_method)
-       VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, ?)`,
-      [shopId, bill.customer_id, userId, actualPayment, actualPayment, payment_method]
+       VALUES (?, ?, ?, 0, 0, 0, 0, ?, 0, ?)`,
+      [shopId, bill.customer_id, userId, actualPayment, payment_method]
     );
 
     await connection.commit();
