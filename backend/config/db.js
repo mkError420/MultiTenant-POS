@@ -83,6 +83,28 @@ const pool = mysql.createPool({
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
     console.log("Migration: Verified and created 'supplier_returns' table.");
+
+    // Create customer_returns table if not exists
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`customer_returns\` (
+        \`id\` INT AUTO_INCREMENT,
+        \`shop_id\` INT NOT NULL,
+        \`customer_id\` INT NULL,
+        \`sale_id\` INT NULL,
+        \`product_id\` INT NOT NULL,
+        \`quantity\` INT NOT NULL,
+        \`refund_amount\` DECIMAL(10,2) NOT NULL,
+        \`notes\` TEXT NULL,
+        \`deduct_from_due\` TINYINT(1) NOT NULL DEFAULT 0,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        CONSTRAINT \`fk_customer_returns_shop\` FOREIGN KEY (\`shop_id\`) REFERENCES \`shops\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_customer_returns_customer\` FOREIGN KEY (\`customer_id\`) REFERENCES \`customers\` (\`id\`) ON DELETE SET NULL,
+        CONSTRAINT \`fk_customer_returns_sale\` FOREIGN KEY (\`sale_id\`) REFERENCES \`sales\` (\`id\`) ON DELETE SET NULL,
+        CONSTRAINT \`fk_customer_returns_product\` FOREIGN KEY (\`product_id\`) REFERENCES \`products\` (\`id\`) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    console.log("Migration: Verified and created 'customer_returns' table.");
     
     connection.release();
   } catch (error) {

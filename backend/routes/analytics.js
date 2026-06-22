@@ -85,9 +85,33 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
     const [customerDueRows] = await db.query(customerDueQuery, hasShop ? [shopId] : []);
     const totalCustomerDue = parseFloat(customerDueRows[0].total_due || 0);
 
-    // Calculate Net Profits
-    const netProfitCOGS = totalSales - totalCOGS - totalOther - totalWastage;
-    const netProfitCashflow = totalSalesCash - totalPurchasingCash - totalOther - totalWastage;
+    // 8. Calculate Customer Returns (Refunds)
+    let returnsQuery = 'SELECT SUM(refund_amount) AS total_refunds FROM customer_returns WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
+    const returnsParams = hasShop ? [shopId] : [];
+    if (start_date && end_date) {
+      returnsQuery += ' AND created_at BETWEEN ? AND ?';
+      returnsParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+    }
+    const [returnsRows] = await db.query(returnsQuery, returnsParams);
+    const totalRefunds = parseFloat(returnsRows[0].total_refunds || 0);
+
+    // 9. Calculate Returned COGS to adjust Net Profit (reversing cost of items added back to inventory)
+    let returnedCogsQuery = `
+      SELECT SUM(cr.quantity * p.cost_price) AS returned_cogs 
+      FROM customer_returns cr 
+      JOIN products p ON cr.product_id = p.id
+      WHERE ` + (hasShop ? 'cr.shop_id = ?' : '1=1');
+    const returnedCogsParams = hasShop ? [shopId] : [];
+    if (start_date && end_date) {
+      returnedCogsQuery += ' AND cr.created_at BETWEEN ? AND ?';
+      returnedCogsParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+    }
+    const [returnedCogsRows] = await db.query(returnedCogsQuery, returnedCogsParams);
+    const totalReturnedCOGS = parseFloat(returnedCogsRows[0].returned_cogs || 0);
+
+    // Calculate Net Profits (including Customer Returns and COGS reversal)
+    const netProfitCOGS = totalSales - (totalCOGS - totalReturnedCOGS) - totalOther - totalWastage - totalRefunds;
+    const netProfitCashflow = totalSalesCash - totalPurchasingCash - totalOther - totalWastage - totalRefunds;
 
     // Calculate 7-Day Trend for Trading Profitability (COGS Basis) and Cashflow
     const trendMap = {};
@@ -100,6 +124,8 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
         sales_revenue: 0, 
         sales_cash_received: 0, 
         cost_of_goods_sold: 0, 
+        customer_returns: 0,
+        returned_cogs: 0,
         other_costs: 0, 
         wastage_loss: 0, 
         inventory_purchasing_cost: 0, 
@@ -132,6 +158,25 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
       if (trendMap[row.date]) trendMap[row.date].cost_of_goods_sold = parseFloat(row.cogs || 0);
     });
 
+    // Query daily Customer Returns
+    let trendReturnsQuery = 'SELECT DATE_FORMAT(created_at, "%Y-%m-%d") AS date, SUM(refund_amount) AS refunds FROM customer_returns WHERE ' + (hasShop ? 'shop_id = ?' : '1=1') + ' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(created_at)';
+    const [trendReturnsRows] = await db.query(trendReturnsQuery, returnsParams.slice(0, hasShop ? 1 : 0));
+    trendReturnsRows.forEach(row => {
+      if (trendMap[row.date]) trendMap[row.date].customer_returns = parseFloat(row.refunds || 0);
+    });
+
+    // Query daily Returned COGS
+    let trendReturnedCogsQuery = `
+      SELECT DATE_FORMAT(cr.created_at, "%Y-%m-%d") AS date, SUM(cr.quantity * p.cost_price) AS returned_cogs 
+      FROM customer_returns cr 
+      JOIN products p ON cr.product_id = p.id
+      WHERE ` + (hasShop ? 'cr.shop_id = ?' : '1=1') + ` AND cr.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+      GROUP BY DATE(cr.created_at)`;
+    const [trendReturnedCogsRows] = await db.query(trendReturnedCogsQuery, returnedCogsParams.slice(0, hasShop ? 1 : 0));
+    trendReturnedCogsRows.forEach(row => {
+      if (trendMap[row.date]) trendMap[row.date].returned_cogs = parseFloat(row.returned_cogs || 0);
+    });
+
     // Query daily Other Costs
     let trendOtherQuery = 'SELECT DATE_FORMAT(cost_date, "%Y-%m-%d") AS date, SUM(amount) AS other FROM other_costs WHERE ' + (hasShop ? 'shop_id = ?' : '1=1') + ' AND cost_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(cost_date)';
     const [trendOtherRows] = await db.query(trendOtherQuery, otherParams.slice(0, hasShop ? 1 : 0));
@@ -159,8 +204,10 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
     // Calculate daily Net Profit (Trading & Cashflow)
     Object.keys(trendMap).forEach(dateStr => {
       const d = trendMap[dateStr];
-      d.net_profit_cogs = d.sales_revenue - d.cost_of_goods_sold - d.other_costs - d.wastage_loss;
-      d.net_profit_cashflow = d.sales_cash_received - d.inventory_purchasing_cash_paid - d.other_costs - d.wastage_loss;
+      const dailyRefunds = d.customer_returns || 0;
+      const dailyReturnedCOGS = d.returned_cogs || 0;
+      d.net_profit_cogs = d.sales_revenue - (d.cost_of_goods_sold - dailyReturnedCOGS) - d.other_costs - d.wastage_loss - dailyRefunds;
+      d.net_profit_cashflow = d.sales_cash_received - d.inventory_purchasing_cash_paid - d.other_costs - d.wastage_loss - dailyRefunds;
     });
 
     const trend = Object.values(trendMap);
@@ -169,7 +216,8 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
       sales_revenue: totalSales,
       sales_cash_received: totalSalesCash,
       sales_count: salesCount,
-      cost_of_goods_sold: totalCOGS,
+      cost_of_goods_sold: totalCOGS - totalReturnedCOGS,
+      customer_returns: totalRefunds,
       inventory_purchasing_cost: totalPurchasing,
       inventory_purchasing_cash_paid: totalPurchasingCash,
       supplier_due: totalSupplierDue,
