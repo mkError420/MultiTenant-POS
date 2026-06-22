@@ -850,14 +850,14 @@ router.post('/:id/returns', authorize(['shop_admin']), async (req, res) => {
       return res.status(404).json({ error: 'Supplier not found.' });
     }
 
-    // 2. Verify product exists, belongs to this supplier, and belongs to this shop
+    // 2. Verify product exists and belongs to this shop
     const [productRows] = await conn.query(
-      'SELECT id, stock_quantity, name FROM products WHERE id = ? AND supplier_id = ? AND shop_id = ?',
-      [product_id, supplierId, shopId]
+      'SELECT id, stock_quantity, name FROM products WHERE id = ? AND shop_id = ?',
+      [product_id, shopId]
     );
     if (productRows.length === 0) {
       await conn.rollback();
-      return res.status(404).json({ error: 'Product not found under this supplier.' });
+      return res.status(404).json({ error: 'Product not found.' });
     }
 
     const product = productRows[0];
@@ -901,6 +901,147 @@ router.post('/:id/returns', authorize(['shop_admin']), async (req, res) => {
     await conn.rollback();
     console.error('Expired product action error:', error);
     res.status(500).json({ error: 'Server error processing product action.' });
+  } finally {
+    conn.release();
+  }
+});
+
+/**
+ * @route   PUT /api/suppliers/returns/:logId
+ * @desc    Update a return/replacement log entry, updating product inventory if return type
+ * @access  Private (shop_admin)
+ */
+router.put('/returns/:logId', authorize(['shop_admin']), async (req, res) => {
+  const shopId = req.shopId;
+  const logId = req.params.logId;
+  const { quantity, notes, new_expiry_date } = req.body;
+  const newQty = parseInt(quantity);
+
+  if (isNaN(newQty) || newQty <= 0) {
+    return res.status(400).json({ error: 'Quantity must be a positive integer.' });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1. Fetch log
+    const [logs] = await conn.query(
+      'SELECT * FROM supplier_returns WHERE id = ? AND shop_id = ?',
+      [logId, shopId]
+    );
+
+    if (logs.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Return/replacement log not found.' });
+    }
+
+    const log = logs[0];
+
+    // 2. Adjust stock if it is a return
+    if (log.action_type === 'return') {
+      const [products] = await conn.query(
+        'SELECT stock_quantity FROM products WHERE id = ? AND shop_id = ?',
+        [log.product_id, shopId]
+      );
+      if (products.length === 0) {
+        await conn.rollback();
+        return res.status(404).json({ error: 'Associated product not found.' });
+      }
+
+      const product = products[0];
+      const diff = newQty - log.quantity; // positive means we returned more (reduce stock), negative means we returned fewer (add back to stock)
+      
+      if (product.stock_quantity < diff) {
+        await conn.rollback();
+        return res.status(400).json({ error: `Insufficient stock to return additional units. Available: ${product.stock_quantity}.` });
+      }
+
+      await conn.query(
+        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ? AND shop_id = ?',
+        [diff, log.product_id, shopId]
+      );
+    } else if (log.action_type === 'replace') {
+      // If the new expiry date changed, update the product's expiry date
+      if (new_expiry_date) {
+        const newExpDate = new Date(new_expiry_date);
+        if (isNaN(newExpDate.getTime()) || newExpDate <= new Date()) {
+          await conn.rollback();
+          return res.status(400).json({ error: 'New expiry date must be a valid future date.' });
+        }
+
+        await conn.query(
+          'UPDATE products SET expiry_date = ? WHERE id = ? AND shop_id = ?',
+          [new_expiry_date, log.product_id, shopId]
+        );
+      }
+    }
+
+    // 3. Update log
+    await conn.query(
+      `UPDATE supplier_returns 
+       SET quantity = ?, notes = ?, new_expiry_date = ? 
+       WHERE id = ? AND shop_id = ?`,
+      [newQty, notes || null, log.action_type === 'replace' ? (new_expiry_date || null) : null, logId, shopId]
+    );
+
+    await conn.commit();
+    res.json({ message: 'Log updated successfully.' });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Update return log error:', error);
+    res.status(500).json({ error: 'Server error updating return/replacement log.' });
+  } finally {
+    conn.release();
+  }
+});
+
+/**
+ * @route   DELETE /api/suppliers/returns/:logId
+ * @desc    Delete a return/replacement log entry, reverting product inventory if return type
+ * @access  Private (shop_admin)
+ */
+router.delete('/returns/:logId', authorize(['shop_admin']), async (req, res) => {
+  const shopId = req.shopId;
+  const logId = req.params.logId;
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1. Fetch log details
+    const [logs] = await conn.query(
+      'SELECT * FROM supplier_returns WHERE id = ? AND shop_id = ?',
+      [logId, shopId]
+    );
+
+    if (logs.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Return/replacement log not found.' });
+    }
+
+    const log = logs[0];
+
+    // 2. If it was a return, restore product stock
+    if (log.action_type === 'return') {
+      await conn.query(
+        'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ? AND shop_id = ?',
+        [log.quantity, log.product_id, shopId]
+      );
+    }
+
+    // 3. Delete log
+    await conn.query(
+      'DELETE FROM supplier_returns WHERE id = ? AND shop_id = ?',
+      [logId, shopId]
+    );
+
+    await conn.commit();
+    res.json({ message: 'Log deleted successfully and inventory adjusted.' });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Delete return log error:', error);
+    res.status(500).json({ error: 'Server error deleting return/replacement log.' });
   } finally {
     conn.release();
   }

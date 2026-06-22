@@ -39,6 +39,11 @@ export default function Suppliers() {
   const [returnFormData, setReturnFormData] = useState({ quantity: '', notes: '' });
   const [replaceFormData, setReplaceFormData] = useState({ quantity: '', new_expiry_date: '', notes: '' });
 
+  // Log Edit CRUD states
+  const [showEditLogModal, setShowEditLogModal] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [editLogFormData, setEditLogFormData] = useState({ quantity: '', notes: '', new_expiry_date: '' });
+
   // Supplier basic form state
   const [formData, setFormData] = useState({
     name: '',
@@ -675,6 +680,64 @@ export default function Suppliers() {
     }
   };
 
+  const handleDeleteLog = async (log) => {
+    const confirmMsg = log.action_type === 'return'
+      ? `Are you sure you want to delete this return log? This will revert product stock quantity by adding ${log.quantity} units back.`
+      : 'Are you sure you want to delete this replacement log?';
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/suppliers/returns/${log.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.error || 'Failed to delete log.');
+
+      triggerAlert('success', 'Log entry deleted and inventory reverted successfully!');
+      loadProfileData(selectedSupplierId);
+      fetchProducts(); // Refresh products
+    } catch (err) {
+      triggerAlert('error', err.message);
+    }
+  };
+
+  const handleEditLogSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedLog || !editLogFormData.quantity || parseInt(editLogFormData.quantity) <= 0) {
+      triggerAlert('error', 'Please enter a valid quantity.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/suppliers/returns/${selectedLog.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          quantity: parseInt(editLogFormData.quantity),
+          notes: editLogFormData.notes,
+          new_expiry_date: selectedLog.action_type === 'replace' ? editLogFormData.new_expiry_date : undefined
+        })
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.error || 'Failed to update log.');
+
+      triggerAlert('success', 'Log entry updated and inventory adjusted successfully!');
+      setShowEditLogModal(false);
+      setSelectedLog(null);
+      setEditLogFormData({ quantity: '', notes: '', new_expiry_date: '' });
+      loadProfileData(selectedSupplierId);
+      fetchProducts(); // Refresh products
+    } catch (err) {
+      triggerAlert('error', err.message);
+    }
+  };
+
   // HELPER FORMATTERS
   const formatCurrency = (val) => `৳${parseFloat(val).toFixed(2)}`;
   const formatDate = (dateStr) => {
@@ -721,6 +784,7 @@ export default function Suppliers() {
           name: log.product_name,
           sku: log.product_sku,
           stock: pDetails ? pDetails.stock_quantity : 'N/A',
+          stock_quantity: pDetails ? pDetails.stock_quantity : 0,
           current_cost: pDetails ? pDetails.cost_price : log.new_cost_price
         };
       });
@@ -1059,12 +1123,13 @@ export default function Suppliers() {
                         <th className="p-3">Product Name</th>
                         <th className="p-3">Last Cost Price</th>
                         <th className="p-3">Current Active Stock</th>
+                        <th className="p-3 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
                       {uniqueProducts.length === 0 ? (
                         <tr>
-                          <td colSpan="4" className="p-8 text-center text-slate-400">No products recorded.</td>
+                          <td colSpan="5" className="p-8 text-center text-slate-400">No products recorded.</td>
                         </tr>
                       ) : (
                         uniqueProducts.map(p => (
@@ -1076,6 +1141,24 @@ export default function Suppliers() {
                               <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded border border-slate-200">
                                 {p.stock} units
                               </span>
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => {
+                                  setSelectedExpiredProduct(p);
+                                  setReturnFormData({ quantity: String(p.stock_quantity || 0), notes: '' });
+                                  setShowReturnModal(true);
+                                }}
+                                disabled={!(p.stock_quantity > 0)}
+                                className={`font-bold py-1 px-2.5 rounded border transition-colors ${
+                                  p.stock_quantity > 0
+                                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+                                    : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                                }`}
+                                title={p.stock_quantity > 0 ? "Return to Supplier" : "No stock available to return"}
+                              >
+                                Return to Supplier
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -1160,12 +1243,13 @@ export default function Suppliers() {
                           <th className="p-3">Action Type</th>
                           <th className="p-3">New Expiry Date</th>
                           <th className="p-3">Notes</th>
+                          <th className="p-3 text-center">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs">
                         {!profileData.returnsHistory || profileData.returnsHistory.length === 0 ? (
                           <tr>
-                            <td colSpan="7" className="p-8 text-center text-slate-400">No returns or replacements history logged.</td>
+                            <td colSpan="8" className="p-8 text-center text-slate-400">No returns or replacements history logged.</td>
                           </tr>
                         ) : (
                           profileData.returnsHistory.map(log => (
@@ -1185,6 +1269,28 @@ export default function Suppliers() {
                               </td>
                               <td className="p-3 text-slate-650">{log.new_expiry_date ? new Date(log.new_expiry_date).toLocaleDateString() : '-'}</td>
                               <td className="p-3 text-slate-600 italic">{log.notes || '-'}</td>
+                              <td className="p-3 text-center space-x-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedLog(log);
+                                    setEditLogFormData({
+                                      quantity: String(log.quantity),
+                                      notes: log.notes || '',
+                                      new_expiry_date: log.new_expiry_date ? log.new_expiry_date.split('T')[0] : ''
+                                    });
+                                    setShowEditLogModal(true);
+                                  }}
+                                  className="text-indigo-650 hover:text-indigo-900 font-bold"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteLog(log)}
+                                  className="text-rose-600 hover:text-rose-900 font-bold"
+                                >
+                                  Delete
+                                </button>
+                              </td>
                             </tr>
                           ))
                         )}
@@ -1214,6 +1320,9 @@ export default function Suppliers() {
 
         {/* RENDER REPLACE MODAL */}
         {showReplaceModal && renderReplaceModal()}
+
+        {/* RENDER EDIT LOG MODAL */}
+        {showEditLogModal && renderEditLogModal()}
       </div>
     );
   }
@@ -2324,6 +2433,87 @@ export default function Suppliers() {
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors shadow"
               >
                 Confirm Replacement
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // EDIT LOG MODAL
+  function renderEditLogModal() {
+    if (!selectedLog) return null;
+    const isReturn = selectedLog.action_type === 'return';
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+            <div>
+              <span className="text-xs font-bold text-indigo-650 uppercase tracking-wider">
+                Edit {isReturn ? 'Return' : 'Replacement'} Log
+              </span>
+              <h3 className="text-lg font-bold text-slate-800">{selectedLog.product_name}</h3>
+            </div>
+            <button onClick={() => { setShowEditLogModal(false); setSelectedLog(null); }} className="text-slate-400 hover:text-slate-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form onSubmit={handleEditLogSubmit} className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quantity *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editLogFormData.quantity}
+                  onChange={(e) => setEditLogFormData({ ...editLogFormData, quantity: e.target.value })}
+                  required
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              {!isReturn && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">New Expiry Date *</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={editLogFormData.new_expiry_date}
+                    onChange={(e) => setEditLogFormData({ ...editLogFormData, new_expiry_date: e.target.value })}
+                    required
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes / Details</label>
+              <textarea
+                value={editLogFormData.notes}
+                onChange={(e) => setEditLogFormData({ ...editLogFormData, notes: e.target.value })}
+                placeholder="Edit notes..."
+                rows="3"
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+              />
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => { setShowEditLogModal(false); setSelectedLog(null); }}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition-colors shadow"
+              >
+                Save Updates
               </button>
             </div>
           </form>
