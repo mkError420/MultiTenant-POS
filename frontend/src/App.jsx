@@ -15,6 +15,7 @@ import HeldBills from './components/HeldBills';
 import OtherCost from './components/OtherCost';
 import TotalRevenue from './components/TotalRevenue';
 import Wastage from './components/Wastage';
+import BalanceSheet from './components/BalanceSheet';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -188,6 +189,7 @@ export default function App() {
         case '/wastage':   return <Wastage />;
         case '/other-cost': return <OtherCost />;
         case '/total-revenue': return <TotalRevenue />;
+        case '/balance-sheet': return <BalanceSheet />;
         case '/settings':  return <Settings />;
         default:           return <Dashboard />;
       }
@@ -228,6 +230,7 @@ export default function App() {
       case '/sales':     return <SalesHistory />;
       case '/other-cost': return <OtherCost />;
       case '/total-revenue': return <TotalRevenue />;
+      case '/balance-sheet': return <BalanceSheet />;
       case '/wastage': return <Wastage />;
       case '/staff':     return <ManageStaff />;
       case '/settings':  return <Settings />;
