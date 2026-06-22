@@ -40,7 +40,14 @@ router.get('/my-shop', enforceTenant, authorize(['shop_admin', 'shop_staff']), a
       return res.status(404).json({ error: 'Shop profile not found.' });
     }
 
-    res.json(shops[0]);
+    const shop = shops[0];
+
+    // If the shop is suspended, deny access
+    if (shop.status !== 'active') {
+      return res.status(403).json({ error: 'This shop has been suspended. Please contact the system administrator.' });
+    }
+
+    res.json(shop);
   } catch (error) {
     console.error('Fetch shop error:', error);
     res.status(500).json({ error: 'Server error retrieving shop profile.' });

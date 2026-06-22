@@ -42,6 +42,7 @@ function getDefaultPath(user) {
 export default function App() {
   const [user, setUser] = useState(null);       // null = not logged in
   const [loading, setLoading] = useState(true); // checking stored token on startup
+  const [suspendedMessage, setSuspendedMessage] = useState(''); // shop suspended message
   const [currentPath, setCurrentPath] = useState('/checkout');
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
   const [expiryAlerts, setExpiryAlerts] = useState([]);
@@ -71,13 +72,24 @@ export default function App() {
     fetch(`${API_BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => {
+      .then(async (res) => {
         if (res.ok) {
           return res.json();
+        }
+        // If 403, check if shop is suspended
+        if (res.status === 403) {
+          const data = await res.json().catch(() => ({}));
+          const msg = data.error || 'Access denied.';
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setSuspendedMessage(msg);
+          setLoading(false);
+          return;
         }
         throw new Error('Token rejected by server');
       })
       .then((data) => {
+        if (!data) return; // handled above (suspended)
         // Build user object from server response
         const userObj = {
           id: data.id,
@@ -113,6 +125,20 @@ export default function App() {
           const shopResponse = await fetch(`${API_BASE_URL}/shops/my-shop`, {
             headers: { Authorization: `Bearer ${token}` },
           });
+
+          // If the shop is suspended, the server returns 403 — force logout
+          if (shopResponse.status === 403) {
+            const data = await shopResponse.json().catch(() => ({}));
+            const msg = data.error || 'This shop has been suspended.';
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+            setLowStockAlerts([]);
+            setExpiryAlerts([]);
+            setSuspendedMessage(msg);
+            return;
+          }
+
           if (shopResponse.ok) {
             const shopData = await shopResponse.json();
             setUser((prev) => {
@@ -174,6 +200,7 @@ export default function App() {
     setUser(null);
     setLowStockAlerts([]);
     setExpiryAlerts([]);
+    setSuspendedMessage('');
   };
 
   // Routing Handler
@@ -249,9 +276,32 @@ export default function App() {
     );
   }
 
-  // Not logged in — show Login page
+  // Not logged in — show Login page (with optional suspension message)
   if (!user) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <>
+        {suspendedMessage && (
+          <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-center p-4 bg-slate-950">
+            <div className="w-full max-w-md bg-rose-900/40 border border-rose-500/40 rounded-2xl p-6 text-center shadow-2xl backdrop-blur-sm">
+              <div className="w-14 h-14 rounded-2xl bg-rose-500/20 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-7 h-7 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-rose-300 mb-1">Shop Suspended</h3>
+              <p className="text-sm text-rose-200/80 mb-4">{suspendedMessage}</p>
+              <button
+                onClick={() => setSuspendedMessage('')}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl transition-colors"
+              >
+                Go to Login
+              </button>
+            </div>
+          </div>
+        )}
+        <Login onLoginSuccess={handleLoginSuccess} />
+      </>
+    );
   }
 
   // Logged in — show dashboard

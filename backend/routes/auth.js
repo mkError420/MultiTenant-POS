@@ -18,9 +18,9 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // 1. Fetch user by email
+    // 1. Fetch user by email (also fetch shop status)
     const [users] = await db.query(
-      'SELECT u.*, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.email = ?',
+      'SELECT u.*, s.name as shop_name, s.status as shop_status FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.email = ?',
       [email]
     );
 
@@ -35,13 +35,18 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Your account is suspended.' });
     }
 
-    // 3. Compare passwords
+    // 3. Check if the user's shop is suspended (skip for super_admin who has no shop)
+    if (user.role !== 'super_admin' && user.shop_id && user.shop_status !== 'active') {
+      return res.status(403).json({ error: 'This shop has been suspended. Please contact the system administrator.' });
+    }
+
+    // 4. Compare passwords
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
-    // 4. Generate JWT
+    // 5. Generate JWT
     const allowed_sections = typeof user.allowed_sections === 'string' ? JSON.parse(user.allowed_sections) : (user.allowed_sections || null);
     const payload = {
       id: user.id,
@@ -85,13 +90,19 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const [users] = await db.query(
-      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ? AND u.status = "active"',
+      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, s.name as shop_name, s.status as shop_status FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ? AND u.status = "active"',
       [req.user.id]
     );
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found or account suspended.' });
     }
     const user = users[0];
+
+    // Check if the shop is suspended (for non-super_admin)
+    if (user.role !== 'super_admin' && user.shop_id && user.shop_status !== 'active') {
+      return res.status(403).json({ error: 'This shop has been suspended. Please contact the system administrator.' });
+    }
+
     res.json({
       id: user.id,
       name: user.name,
