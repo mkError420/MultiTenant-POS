@@ -73,7 +73,8 @@ router.post('/login', async (req, res) => {
         role: user.role,
         shop_id: user.shop_id,
         shop_name: user.shop_name || 'Global System',
-        allowed_sections
+        allowed_sections,
+        logo: user.logo
       }
     });
   } catch (error) {
@@ -90,7 +91,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const [users] = await db.query(
-      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, s.name as shop_name, s.status as shop_status FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ? AND u.status = "active"',
+      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, u.logo, s.name as shop_name, s.status as shop_status FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ? AND u.status = "active"',
       [req.user.id]
     );
     if (users.length === 0) {
@@ -111,6 +112,7 @@ router.get('/me', authenticate, async (req, res) => {
       shop_id: user.shop_id,
       shop_name: user.shop_name || 'Global System',
       allowed_sections: typeof user.allowed_sections === 'string' ? JSON.parse(user.allowed_sections) : (user.allowed_sections || null),
+      logo: user.logo
     });
   } catch (error) {
     console.error('Get me error:', error);
@@ -124,7 +126,7 @@ router.get('/me', authenticate, async (req, res) => {
  * @access  Private (all roles)
  */
 router.put('/me', authenticate, async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, logo } = req.body;
 
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required.' });
@@ -154,6 +156,11 @@ router.put('/me', authenticate, async (req, res) => {
       queryParams.push(passwordHash);
     }
 
+    if (logo !== undefined) {
+      updateFields.push('logo = ?');
+      queryParams.push(logo);
+    }
+
     queryParams.push(req.user.id);
 
     // 3. Execute update
@@ -164,7 +171,7 @@ router.put('/me', authenticate, async (req, res) => {
 
     // 4. Retrieve updated user with shop details
     const [users] = await db.query(
-      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ?',
+      'SELECT u.id, u.name, u.email, u.role, u.shop_id, u.allowed_sections, u.logo, s.name as shop_name FROM users u LEFT JOIN shops s ON u.shop_id = s.id WHERE u.id = ?',
       [req.user.id]
     );
 
@@ -175,7 +182,7 @@ router.put('/me', authenticate, async (req, res) => {
     const updatedUser = users[0];
     const allowed_sections = typeof updatedUser.allowed_sections === 'string' ? JSON.parse(updatedUser.allowed_sections) : (updatedUser.allowed_sections || null);
 
-    // 5. Generate a new JWT token to keep frontend session updated
+    // 5. Generate a new JWT token to keep frontend session updated (excluding the large logo Base64 string from JWT to avoid 431 errors)
     const payload = {
       id: updatedUser.id,
       name: updatedUser.name,
@@ -202,7 +209,8 @@ router.put('/me', authenticate, async (req, res) => {
         role: updatedUser.role,
         shop_id: updatedUser.shop_id,
         shop_name: updatedUser.shop_name || 'Global System',
-        allowed_sections
+        allowed_sections,
+        logo: updatedUser.logo
       }
     });
 

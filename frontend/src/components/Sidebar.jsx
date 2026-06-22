@@ -12,6 +12,7 @@ const SettingsIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentC
 
 export default function Sidebar({
   role = 'shop_admin',
+  logo = null,
   allowedSections = null,
   sidebarOpen,
   setSidebarOpen,
@@ -158,9 +159,17 @@ export default function Sidebar({
         {/* Brand Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-600 font-bold text-white shrink-0">
-               POS
-            </div>
+            {logo ? (
+              <img
+                src={logo}
+                alt="Brand Logo"
+                className="w-9 h-9 rounded-lg object-contain bg-slate-900 border border-slate-700 shrink-0"
+              />
+            ) : (
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-600 font-bold text-white shrink-0">
+                 POS
+              </div>
+            )}
             {!isCollapsed && (
               <span className="text-lg font-bold tracking-wider bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent truncate">
                 {role === 'super_admin' ? 'SuperAdmin' : 'ShopPortal'}

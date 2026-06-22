@@ -36,6 +36,7 @@ export default function DashboardLayout({
       {/* 1. Left Sidebar Navigation */}
       <Sidebar
         role={user.role}
+        logo={user.logo}
         allowedSections={user.allowed_sections}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}

@@ -99,7 +99,8 @@ export default function App() {
           role: data.role,
           shop_id: data.shop_id,
           shop_name: data.shop_name || 'Global System',
-          allowed_sections: data.allowed_sections
+          allowed_sections: data.allowed_sections,
+          logo: data.logo
         };
         localStorage.setItem('user', JSON.stringify(userObj));
         setUser(userObj);

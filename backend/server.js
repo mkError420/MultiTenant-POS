@@ -11,8 +11,9 @@ const PORT = process.env.PORT || 5000;
 // Enable CORS with support for headers/credentials
 app.use(cors());
 
-// Body parser
-app.use(express.json());
+// Body parser (increased limits to allow base64 image uploads)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Import database to trigger pool initialization
 require('./config/db');

@@ -105,6 +105,13 @@ const pool = mysql.createPool({
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
     console.log("Migration: Verified and created 'customer_returns' table.");
+
+    // Check if logo column exists on users table
+    const [logoColumns] = await connection.query("SHOW COLUMNS FROM `users` LIKE 'logo'");
+    if (logoColumns.length === 0) {
+      await connection.query("ALTER TABLE `users` ADD COLUMN `logo` LONGTEXT NULL");
+      console.log("Migration: Added 'logo' column to 'users' table.");
+    }
     
     connection.release();
   } catch (error) {
