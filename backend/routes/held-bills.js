@@ -277,18 +277,27 @@ router.post('/:id/pay-due', async (req, res) => {
 
     if (originalSaleId) {
       await connection.query(
-        'UPDATE sales SET due_amount = GREATEST(due_amount - ?, 0) WHERE id = ? AND shop_id = ?',
-        [actualPayment, originalSaleId, shopId]
+        'UPDATE sales SET paid_amount = paid_amount + ?, due_amount = GREATEST(due_amount - ?, 0) WHERE id = ? AND shop_id = ?',
+        [actualPayment, actualPayment, originalSaleId, shopId]
       );
     }
 
-    // 5. Record a sales transaction for the due payment (final_amount = 0 to avoid double counting revenue, paid_amount = actualPayment to log cash inflow)
-    const note = `Due payment for Held Bill #${heldBillId}${originalSaleId ? ` (Sale #${originalSaleId})` : ''}`;
+    // 5. Record the due payment event in the due_payments history table
     await connection.query(
-      `INSERT INTO sales (shop_id, customer_id, user_id, total_amount, discount, tax, final_amount, paid_amount, due_amount, payment_method)
-       VALUES (?, ?, ?, 0, 0, 0, 0, ?, 0, ?)`,
-      [shopId, bill.customer_id, userId, actualPayment, payment_method]
+      `INSERT INTO due_payments (shop_id, customer_id, sale_id, amount, payment_method)
+       VALUES (?, ?, ?, ?, ?)`,
+      [shopId, bill.customer_id, originalSaleId, actualPayment, payment_method]
     );
+
+    // 6. Record a sales transaction for the due payment (final_amount = 0 to avoid double counting revenue, paid_amount = actualPayment to log cash inflow)
+    // Only created as a fallback if the held bill has no original sale linked
+    if (!originalSaleId) {
+      await connection.query(
+        `INSERT INTO sales (shop_id, customer_id, user_id, total_amount, discount, tax, final_amount, paid_amount, due_amount, payment_method)
+         VALUES (?, ?, ?, 0, 0, 0, 0, ?, 0, ?)`,
+        [shopId, bill.customer_id, userId, actualPayment, payment_method]
+      );
+    }
 
     await connection.commit();
 

@@ -186,7 +186,33 @@ router.get('/:id/history', async (req, res) => {
       }
     });
 
-    res.json(Object.values(salesMap));
+    const salesList = Object.values(salesMap);
+
+    // Fetch due payment collections
+    const [payments] = await db.query(
+      'SELECT id, created_at, payment_method, amount FROM due_payments WHERE customer_id = ? AND shop_id = ? ORDER BY created_at DESC',
+      [customerId, shopId]
+    );
+
+    payments.forEach(p => {
+      salesList.push({
+        sale_id: `pay-${p.id}`,
+        created_at: p.created_at,
+        payment_method: p.payment_method,
+        total_amount: 0,
+        discount: 0,
+        tax: 0,
+        final_amount: p.amount,
+        paid_amount: p.amount,
+        due_amount: 0,
+        items: []
+      });
+    });
+
+    // Sort combined records chronologically by created_at DESC
+    salesList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json(salesList);
   } catch (error) {
     console.error('Fetch customer history error:', error);
     res.status(500).json({ error: 'Server error retrieving customer purchase history.' });

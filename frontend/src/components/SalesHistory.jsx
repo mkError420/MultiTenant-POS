@@ -22,6 +22,9 @@ export default function SalesHistory() {
   const [saleDetails, setSaleDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState('thermal'); // 'thermal' | 'regular'
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = user.role === 'shop_admin';
+  const [selectedSaleIds, setSelectedSaleIds] = useState([]);
 
   const handlePrint = (mode) => {
     document.body.classList.add(`print-mode-${mode}`);
@@ -92,12 +95,14 @@ export default function SalesHistory() {
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedSaleIds([]);
     fetchSales();
     fetchHeldBills();
   }, [startDate, endDate]);
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedSaleIds([]);
   }, [search]);
 
   const openReceipt = (sale) => {
@@ -129,6 +134,63 @@ export default function SalesHistory() {
       }
 
       // Refresh sales list (totals auto-adjust)
+      fetchSales();
+      fetchHeldBills();
+    } catch (err) {
+      triggerAlert('error', err.message);
+    }
+  };
+
+  const handleSelectAllToggle = (currentSales) => {
+    const currentSaleIds = currentSales.map(s => s.id);
+    const areAllCurrentPageSelected = currentSaleIds.length > 0 && currentSaleIds.every(id => selectedSaleIds.includes(id));
+    if (areAllCurrentPageSelected) {
+      setSelectedSaleIds(prev => prev.filter(id => !currentSaleIds.includes(id)));
+    } else {
+      setSelectedSaleIds(prev => {
+        const union = new Set([...prev, ...currentSaleIds]);
+        return Array.from(union);
+      });
+    }
+  };
+
+  const handleSelectToggle = (saleId) => {
+    setSelectedSaleIds(prev =>
+      prev.includes(saleId)
+        ? prev.filter(id => id !== saleId)
+        : [...prev, saleId]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedSaleIds.length === 0) return;
+    
+    if (!window.confirm(`Are you sure you want to delete the ${selectedSaleIds.length} selected sales?\n\nThis will:\n• Restore all product stock quantities for these transactions\n• Reverse any customer due balances associated with them\n• Remove these transactions from all reports\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/sales/bulk-delete`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ ids: selectedSaleIds })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to delete selected sales.');
+
+      triggerAlert('success', data.message);
+      setSelectedSaleIds([]);
+
+      if (selectedSale && selectedSaleIds.includes(selectedSale.id)) {
+        setSelectedSale(null);
+        setSaleDetails(null);
+      }
+
       fetchSales();
       fetchHeldBills();
     } catch (err) {
@@ -462,12 +524,54 @@ export default function SalesHistory() {
         );
       })()}
 
+      {/* Bulk Action Bar */}
+      {isAdmin && selectedSaleIds.length > 0 && (
+        <div className="bg-slate-900 text-white rounded-2xl p-4 flex items-center justify-between shadow-xl animate-fade-in">
+          <div className="flex items-center space-x-3">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-450 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+            </span>
+            <span className="text-sm font-semibold">
+              Selected <span className="font-extrabold text-rose-400">{selectedSaleIds.length}</span> transaction{selectedSaleIds.length > 1 ? 's' : ''} for deletion
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setSelectedSaleIds([])}
+              className="text-xs font-semibold text-slate-300 hover:text-white px-3 py-2 rounded-xl hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition-colors flex items-center space-x-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>Delete Selected</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sales Logs Table */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                {isAdmin && (
+                  <th className="p-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={currentSales.length > 0 && currentSales.every(s => selectedSaleIds.includes(s.id))}
+                      onChange={() => handleSelectAllToggle(currentSales)}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="p-4">Invoice ID</th>
                 <th className="p-4">Date</th>
                 <th className="p-4">Customer</th>
@@ -482,7 +586,7 @@ export default function SalesHistory() {
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="p-12 text-center">
+                  <td colSpan="11" className="p-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
                     </div>
@@ -490,13 +594,23 @@ export default function SalesHistory() {
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="p-12 text-center text-slate-400">
+                  <td colSpan="11" className="p-12 text-center text-slate-400">
                     No matching sales transactions found.
                   </td>
                 </tr>
               ) : (
                 currentSales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={sale.id} className={`hover:bg-slate-50/50 transition-colors ${selectedSaleIds.includes(sale.id) ? 'bg-indigo-50/10' : ''}`}>
+                    {isAdmin && (
+                      <td className="p-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedSaleIds.includes(sale.id)}
+                          onChange={() => handleSelectToggle(sale.id)}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="p-4 font-semibold text-slate-700">#{sale.id}</td>
                     <td className="p-4 text-slate-500">{new Date(sale.created_at).toLocaleString()}</td>
                     <td className="p-4 text-slate-800 font-medium">{sale.customer_name || 'Walk-in Customer'}</td>

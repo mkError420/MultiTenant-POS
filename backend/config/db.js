@@ -119,6 +119,24 @@ const pool = mysql.createPool({
       await connection.query("ALTER TABLE `shops` ADD COLUMN `logo` LONGTEXT NULL");
       console.log("Migration: Added 'logo' column to 'shops' table.");
     }
+
+    // Create due_payments table if not exists
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`due_payments\` (
+        \`id\` INT AUTO_INCREMENT,
+        \`shop_id\` INT NOT NULL,
+        \`customer_id\` INT NOT NULL,
+        \`sale_id\` INT NULL,
+        \`amount\` DECIMAL(10,2) NOT NULL,
+        \`payment_method\` ENUM('cash', 'card', 'mobile_pay', 'other') NOT NULL,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        CONSTRAINT \`fk_due_payments_shop\` FOREIGN KEY (\`shop_id\`) REFERENCES \`shops\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_due_payments_customer\` FOREIGN KEY (\`customer_id\`) REFERENCES \`customers\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_due_payments_sale\` FOREIGN KEY (\`sale_id\`) REFERENCES \`sales\` (\`id\`) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    console.log("Migration: Verified and created 'due_payments' table.");
     
     connection.release();
   } catch (error) {

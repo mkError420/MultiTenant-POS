@@ -345,4 +345,97 @@ router.delete('/:id', authorize(['shop_admin']), async (req, res) => {
   }
 });
 
+/**
+ * @route   POST /api/sales/bulk-delete
+ * @desc    Delete/void multiple sale transactions (admin only). Restores stock and adjusts customer due balance for each.
+ * @access  Private (shop_admin)
+ */
+router.post('/bulk-delete', authorize(['shop_admin']), async (req, res) => {
+  const { ids } = req.body;
+  const shopId = req.shopId;
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Please provide an array of sale IDs to delete.' });
+  }
+
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    let totalRestoredItems = 0;
+    let totalDueReversed = 0;
+    const deletedSaleIds = [];
+
+    for (const saleId of ids) {
+      // 1. Fetch and lock the sale record
+      const [sales] = await connection.query(
+        'SELECT * FROM sales WHERE id = ? AND shop_id = ? FOR UPDATE',
+        [saleId, shopId]
+      );
+
+      if (sales.length === 0) {
+        continue;
+      }
+
+      const sale = sales[0];
+
+      // 2. Fetch all sale_items for stock restoration
+      const [saleItems] = await connection.query(
+        'SELECT * FROM sale_items WHERE sale_id = ? AND shop_id = ?',
+        [saleId, shopId]
+      );
+
+      // 3. Restore stock for each sold item
+      for (const item of saleItems) {
+        await connection.query(
+          'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ? AND shop_id = ?',
+          [item.quantity, item.product_id, shopId]
+        );
+        totalRestoredItems += item.quantity;
+      }
+
+      // 4. Reverse customer due_balance if there was a due amount on this sale
+      const dueAmount = parseFloat(sale.due_amount || 0);
+      if (dueAmount > 0 && sale.customer_id) {
+        await connection.query(
+          'UPDATE customers SET due_balance = GREATEST(due_balance - ?, 0) WHERE id = ? AND shop_id = ?',
+          [dueAmount, sale.customer_id, shopId]
+        );
+        totalDueReversed += dueAmount;
+      }
+
+      // 5. Delete sale_items first (foreign key child)
+      await connection.query(
+        'DELETE FROM sale_items WHERE sale_id = ? AND shop_id = ?',
+        [saleId, shopId]
+      );
+
+      // 6. Delete the sale record
+      await connection.query(
+        'DELETE FROM sales WHERE id = ? AND shop_id = ?',
+        [saleId, shopId]
+      );
+
+      deletedSaleIds.push(parseInt(saleId));
+    }
+
+    await connection.commit();
+
+    res.json({
+      message: `${deletedSaleIds.length} sales deleted successfully. Stock restored and customer balances updated.`,
+      deleted_sale_ids: deletedSaleIds,
+      items_restored: totalRestoredItems,
+      due_reversed: totalDueReversed
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Bulk delete sales error:', error);
+    res.status(500).json({ error: 'Server error deleting sale transactions.' });
+  } finally {
+    connection.release();
+  }
+});
+
 module.exports = router;
