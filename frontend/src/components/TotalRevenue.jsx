@@ -106,6 +106,7 @@ export default function TotalRevenue() {
     const rows = [
       ['Sales Revenue (Accrual)', 'Inflow', 'Gross revenue generated from customer sales transactions', revenueData.sales_revenue.toFixed(2)],
       ['Sales Revenue (Cash Collected)', 'Inflow', 'Actual cash collected from sales transactions', revenueData.sales_cash_received.toFixed(2)],
+      ['Customer Due Balance (Receivable)', 'Inflow', 'Total outstanding balance owed by customers', (revenueData.customer_due || 0).toFixed(2)],
       ['Cost of Goods Sold (COGS)', 'Outflow', 'Cost price value of stock sold to customers', revenueData.cost_of_goods_sold.toFixed(2)],
       ['Product Purchasing Cost (Accrual)', 'Outflow', 'Total value of ordered and received purchase orders', revenueData.inventory_purchasing_cost.toFixed(2)],
       ['Product Purchasing Cost (Cash Paid)', 'Outflow', 'Actual cash paid out for purchase orders', revenueData.inventory_purchasing_cash_paid.toFixed(2)],
@@ -267,6 +268,7 @@ export default function TotalRevenue() {
               <div className="mt-4">
                 <span className="block text-2xl font-black text-slate-800">{formatCurrency(revenueData.sales_revenue)}</span>
                 <span className="text-xs font-bold text-emerald-600 mt-1 block">Cash Collected: {formatCurrency(revenueData.sales_cash_received)}</span>
+                <span className="text-xs font-bold text-rose-600 mt-1 block">Due Balance (Receivable): {formatCurrency(revenueData.customer_due)}</span>
                 <span className="text-xs text-slate-450 mt-1 block">From {revenueData.sales_count} sales transactions</span>
               </div>
             </div>

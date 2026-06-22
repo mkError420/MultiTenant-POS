@@ -80,6 +80,11 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
     const [supplierDueRows] = await db.query(supplierDueQuery, hasShop ? [shopId] : []);
     const totalSupplierDue = parseFloat(supplierDueRows[0].total_due || 0);
 
+    // 7. Calculate Customer Due Balance (Outstanding receivables/dues)
+    let customerDueQuery = 'SELECT SUM(due_balance) AS total_due FROM customers WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
+    const [customerDueRows] = await db.query(customerDueQuery, hasShop ? [shopId] : []);
+    const totalCustomerDue = parseFloat(customerDueRows[0].total_due || 0);
+
     // Calculate Net Profits
     const netProfitCOGS = totalSales - totalCOGS - totalOther - totalWastage;
     const netProfitCashflow = totalSalesCash - totalPurchasingCash - totalOther - totalWastage;
@@ -168,6 +173,7 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
       inventory_purchasing_cost: totalPurchasing,
       inventory_purchasing_cash_paid: totalPurchasingCash,
       supplier_due: totalSupplierDue,
+      customer_due: totalCustomerDue,
       other_costs: totalOther,
       wastage_loss: totalWastage,
       net_profit_cogs: netProfitCOGS,

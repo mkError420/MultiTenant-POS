@@ -14,6 +14,7 @@ export default function SalesHistory() {
   const [alert, setAlert] = useState(null);
   const [chartType, setChartType] = useState('revenue'); // 'revenue' or 'sales'
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [search, setSearch] = useState('');
   
   // Modal viewer state
   const [selectedSale, setSelectedSale] = useState(null);
@@ -78,6 +79,10 @@ export default function SalesHistory() {
     fetchSales();
   }, [startDate, endDate]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
   const openReceipt = (sale) => {
     setSelectedSale(sale);
     fetchSaleDetails(sale.id);
@@ -114,15 +119,27 @@ export default function SalesHistory() {
   };
 
   // Computed summary stats
-  const totalSalesCount = sales.length;
-  const totalRevenue = sales.reduce((sum, s) => sum + parseFloat(s.final_amount || 0), 0);
-  const totalPaid = sales.reduce((sum, s) => sum + parseFloat(s.paid_amount !== undefined ? s.paid_amount : s.final_amount || 0), 0);
-  const totalDue = sales.reduce((sum, s) => sum + parseFloat(s.due_amount || 0), 0);
+  const filteredSales = sales.filter((sale) => {
+    const query = search.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      String(sale.id).includes(query) ||
+      (sale.customer_name && sale.customer_name.toLowerCase().includes(query)) ||
+      (sale.staff_name && sale.staff_name.toLowerCase().includes(query)) ||
+      (sale.payment_method && sale.payment_method.toLowerCase().includes(query)) ||
+      (sale.final_amount && String(sale.final_amount).includes(query))
+    );
+  });
 
-  const totalPages = Math.ceil(sales.length / itemsPerPage);
+  const totalSalesCount = filteredSales.length;
+  const totalRevenue = filteredSales.reduce((sum, s) => sum + parseFloat(s.final_amount || 0), 0);
+  const totalPaid = filteredSales.reduce((sum, s) => sum + parseFloat(s.paid_amount !== undefined ? s.paid_amount : s.final_amount || 0), 0);
+  const totalDue = filteredSales.reduce((sum, s) => sum + parseFloat(s.due_amount || 0), 0);
+
+  const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
   const indexOfLastSale = currentPage * itemsPerPage;
   const indexOfFirstSale = indexOfLastSale - itemsPerPage;
-  const currentSales = sales.slice(indexOfFirstSale, indexOfLastSale);
+  const currentSales = filteredSales.slice(indexOfFirstSale, indexOfLastSale);
 
   return (
     <div className="space-y-6">
@@ -170,6 +187,20 @@ export default function SalesHistory() {
             Clear Filter
           </button>
         )}
+
+        {/* Search Input */}
+        <div className="relative flex-1 min-w-[240px] max-w-md md:ml-auto">
+          <input
+            type="text"
+            placeholder="Search by Invoice ID, customer, cashier, or method..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          <svg className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
       </div>
 
       {/* Summary Stat Cards */}
@@ -231,7 +262,7 @@ export default function SalesHistory() {
           trendMap[dateStr] = { date: dateStr, revenue: 0, count: 0 };
         }
 
-        sales.forEach(sale => {
+        filteredSales.forEach(sale => {
           const dateStr = new Date(sale.created_at).toISOString().split('T')[0];
           if (trendMap[dateStr]) {
             trendMap[dateStr].revenue += parseFloat(sale.final_amount || 0);
