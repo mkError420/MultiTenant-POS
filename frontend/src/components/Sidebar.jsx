@@ -84,8 +84,7 @@ export default function Sidebar({
             section: 'Financials',
             items: [
               { label: 'Other Cost', path: '/other-cost', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-              { label: 'Total Revenue', path: '/total-revenue', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
-              { label: 'Balance Sheet', path: '/balance-sheet', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> }
+              { label: 'Total Revenue', path: '/total-revenue', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> }
             ]
           },
           {
@@ -157,7 +156,7 @@ export default function Sidebar({
         {/* Brand Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-600 font-bold text-white shrink-0">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-600 font-bold text-white shrink-0">
                POS
             </div>
             {!isCollapsed && (
@@ -203,7 +202,9 @@ export default function Sidebar({
                     }}
                     className={`w-full flex items-center px-3 py-2.5 rounded-lg font-medium transition-all group text-left ${
                       isActive
-                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                        ? (role === 'super_admin'
+                            ? 'bg-slate-600 text-white shadow-lg shadow-indigo-600/30'
+                            : 'bg-slate-600 text-white shadow-lg shadow-slate-600/30')
                         : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
                     }`}
                     title={isCollapsed ? item.label : ''}

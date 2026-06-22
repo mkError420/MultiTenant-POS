@@ -35,6 +35,34 @@ const pool = mysql.createPool({
       await connection.query("ALTER TABLE `products` ADD COLUMN `unit` VARCHAR(20) NOT NULL DEFAULT 'piece'");
       console.log("Migration: Added 'unit' column to 'products' table.");
     }
+
+    // Check if due_balance column exists on suppliers table
+    const [suppColumns] = await connection.query("SHOW COLUMNS FROM `suppliers` LIKE 'due_balance'");
+    if (suppColumns.length === 0) {
+      await connection.query("ALTER TABLE `suppliers` ADD COLUMN `due_balance` DECIMAL(10,2) NOT NULL DEFAULT 0.00");
+      console.log("Migration: Added 'due_balance' column to 'suppliers' table.");
+    }
+
+    // Check if payment_basis column exists on purchase_orders table
+    const [poBasisCol] = await connection.query("SHOW COLUMNS FROM `purchase_orders` LIKE 'payment_basis'");
+    if (poBasisCol.length === 0) {
+      await connection.query("ALTER TABLE `purchase_orders` ADD COLUMN `payment_basis` ENUM('cash', 'credit') NOT NULL DEFAULT 'cash'");
+      console.log("Migration: Added 'payment_basis' column to 'purchase_orders' table.");
+    }
+
+    // Check if paid_amount column exists on purchase_orders table
+    const [poPaidCol] = await connection.query("SHOW COLUMNS FROM `purchase_orders` LIKE 'paid_amount'");
+    if (poPaidCol.length === 0) {
+      await connection.query("ALTER TABLE `purchase_orders` ADD COLUMN `paid_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00");
+      console.log("Migration: Added 'paid_amount' column to 'purchase_orders' table.");
+    }
+
+    // Check if due_amount column exists on purchase_orders table
+    const [poDueCol] = await connection.query("SHOW COLUMNS FROM `purchase_orders` LIKE 'due_amount'");
+    if (poDueCol.length === 0) {
+      await connection.query("ALTER TABLE `purchase_orders` ADD COLUMN `due_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00");
+      console.log("Migration: Added 'due_amount' column to 'purchase_orders' table.");
+    }
     
     connection.release();
   } catch (error) {

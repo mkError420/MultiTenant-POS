@@ -44,7 +44,17 @@ export default function Suppliers() {
   const [poFormData, setPoFormData] = useState({
     supplier_id: '',
     notes: '',
-    items: [{ product_id: '', quantity_ordered: 1, cost_price: 0.00 }]
+    product_id: '',
+    is_new: false,
+    name: '',
+    sku: '',
+    cost_price: '',
+    selling_price: '',
+    quantity_ordered: 1,
+    unit: 'piece',
+    low_stock_threshold: '10',
+    payment_basis: 'cash',
+    paid_amount: ''
   });
 
   // Receive verification form state
@@ -53,6 +63,7 @@ export default function Suppliers() {
 
   // PO Filter
   const [poFilterStatus, setPoFilterStatus] = useState('all');
+  const [poPaymentAmount, setPoPaymentAmount] = useState('');
 
   // Load baseline directory data
   const fetchSuppliers = async () => {
@@ -275,43 +286,62 @@ export default function Suppliers() {
     setPoFormData({
       supplier_id: supplierId,
       notes: '',
-      items: [{ product_id: '', quantity_ordered: 1, cost_price: 0.00, selling_price: 0.00, is_new: false, name: '', sku: '' }]
+      product_id: '',
+      is_new: false,
+      name: '',
+      sku: '',
+      cost_price: '',
+      selling_price: '',
+      quantity_ordered: 1,
+      unit: 'piece',
+      low_stock_threshold: '10',
+      payment_basis: 'cash',
+      paid_amount: ''
     });
     setShowAddPoModal(true);
   };
 
-  // ADD PO LINE ITEM IN FORM
-  const addPoLine = () => {
-    setPoFormData({
-      ...poFormData,
-      items: [...poFormData.items, { product_id: '', quantity_ordered: 1, cost_price: 0.00, selling_price: 0.00, is_new: false, name: '', sku: '' }]
-    });
-  };
-
-  // REMOVE PO LINE ITEM IN FORM
-  const removePoLine = (index) => {
-    const updated = [...poFormData.items];
-    updated.splice(index, 1);
-    setPoFormData({ ...poFormData, items: updated });
-  };
-
-  // UPDATE PO LINE FIELD
-  const updatePoLineField = (index, field, value) => {
-    const updated = [...poFormData.items];
-    
-    if (field === 'product_id') {
-      updated[index][field] = value;
-      // Auto fill default cost price and selling price from inventory cache if product selected
-      const prod = productsList.find(p => String(p.id) === String(value));
-      if (prod) {
-        updated[index]['cost_price'] = parseFloat(prod.cost_price);
-        updated[index]['selling_price'] = parseFloat(prod.price);
-      }
+  const handlePoProductChange = (productId) => {
+    if (productId === 'new_product') {
+      setPoFormData(prev => ({
+        ...prev,
+        product_id: '',
+        is_new: true,
+        name: '',
+        sku: '',
+        cost_price: '',
+        selling_price: '',
+        unit: 'piece',
+        low_stock_threshold: '10'
+      }));
     } else {
-      updated[index][field] = value;
+      const prod = productsList.find(p => String(p.id) === String(productId));
+      if (prod) {
+        setPoFormData(prev => ({
+          ...prev,
+          product_id: productId,
+          is_new: false,
+          name: prod.name,
+          sku: prod.sku,
+          cost_price: prod.cost_price,
+          selling_price: prod.price,
+          unit: prod.unit || 'piece',
+          low_stock_threshold: prod.low_stock_threshold || '10'
+        }));
+      } else {
+        setPoFormData(prev => ({
+          ...prev,
+          product_id: '',
+          is_new: false,
+          name: '',
+          sku: '',
+          cost_price: '',
+          selling_price: '',
+          unit: 'piece',
+          low_stock_threshold: '10'
+        }));
+      }
     }
-    
-    setPoFormData({ ...poFormData, items: updated });
   };
 
   // SUBMIT PURCHASE ORDER
@@ -322,19 +352,33 @@ export default function Suppliers() {
       return;
     }
     
-    // Validate lines
-    const validLines = poFormData.items.filter(item => {
-      const hasProduct = item.product_id || (item.is_new && item.name && item.sku);
-      return hasProduct && parseInt(item.quantity_ordered) > 0;
-    });
+    const hasProduct = poFormData.product_id || (poFormData.is_new && poFormData.name && poFormData.sku);
+    if (!hasProduct) {
+      triggerAlert('error', 'Please select a product or define a new one.');
+      return;
+    }
 
-    if (validLines.length === 0) {
-      triggerAlert('error', 'Please add at least one product with a valid quantity.');
+    if (parseInt(poFormData.quantity_ordered) <= 0) {
+      triggerAlert('error', 'Quantity ordered must be at least 1.');
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
+      const poItem = poFormData.is_new ? {
+        is_new: true,
+        name: poFormData.name,
+        sku: poFormData.sku,
+        quantity_ordered: parseInt(poFormData.quantity_ordered),
+        cost_price: parseFloat(poFormData.cost_price || 0),
+        selling_price: parseFloat(poFormData.selling_price || 0)
+      } : {
+        product_id: parseInt(poFormData.product_id),
+        quantity_ordered: parseInt(poFormData.quantity_ordered),
+        cost_price: parseFloat(poFormData.cost_price || 0),
+        selling_price: parseFloat(poFormData.selling_price || 0)
+      };
+
       const response = await fetch(`${API_BASE_URL}/suppliers/purchase-orders`, {
         method: 'POST',
         headers: {
@@ -345,24 +389,9 @@ export default function Suppliers() {
           supplier_id: parseInt(poFormData.supplier_id),
           notes: poFormData.notes,
           status: poStatus,
-          items: validLines.map(item => {
-            if (item.is_new) {
-              return {
-                is_new: true,
-                name: item.name,
-                sku: item.sku,
-                quantity_ordered: parseInt(item.quantity_ordered),
-                cost_price: parseFloat(item.cost_price || 0),
-                selling_price: parseFloat(item.selling_price || 0)
-              };
-            }
-            return {
-              product_id: parseInt(item.product_id),
-              quantity_ordered: parseInt(item.quantity_ordered),
-              cost_price: parseFloat(item.cost_price || 0),
-              selling_price: parseFloat(item.selling_price || 0)
-            };
-          })
+          payment_basis: poFormData.payment_basis,
+          paid_amount: poFormData.payment_basis === 'credit' ? parseFloat(poFormData.paid_amount || 0) : undefined,
+          items: [poItem]
         })
       });
 
@@ -372,7 +401,7 @@ export default function Suppliers() {
       triggerAlert('success', `Purchase Order created successfully as ${poStatus}!`);
       setShowAddPoModal(false);
       fetchPurchaseOrders();
-      fetchProducts(); // Refresh products cache in case new product was created
+      fetchProducts(); // Refresh products cache
       if (selectedSupplierId) {
         loadProfileData(selectedSupplierId);
       }
@@ -473,6 +502,37 @@ export default function Suppliers() {
       setShowPoDetailsModal(false);
       fetchPurchaseOrders();
       fetchCostLogs();
+      if (selectedSupplierId) {
+        loadProfileData(selectedSupplierId);
+      }
+    } catch (err) {
+      triggerAlert('error', err.message);
+    }
+  };
+
+  const handlePayPoDue = async (e) => {
+    e.preventDefault();
+    if (!poPaymentAmount || parseFloat(poPaymentAmount) <= 0) {
+      triggerAlert('error', 'Please enter a valid payment amount.');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/suppliers/purchase-orders/${selectedPo.id}/pay`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ payment_amount: parseFloat(poPaymentAmount) })
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.error || 'Failed to record payment.');
+      triggerAlert('success', 'Payment recorded successfully!');
+      setPoPaymentAmount('');
+      openPoDetails(selectedPo.id);
+      fetchPurchaseOrders();
+      fetchSuppliers();
       if (selectedSupplierId) {
         loadProfileData(selectedSupplierId);
       }
@@ -646,6 +706,12 @@ export default function Suppliers() {
                 <span className="block text-xs font-semibold text-slate-400">VENDOR REGISTERED</span>
                 <span className="font-semibold text-slate-700">{new Date(supplier.created_at).toLocaleDateString()}</span>
               </div>
+              <div>
+                <span className="block text-xs font-semibold text-slate-400">OUTSTANDING DUE BALANCE</span>
+                <span className="font-extrabold text-rose-650 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 inline-block mt-1">
+                  {formatCurrency(supplier.due_balance || 0)}
+                </span>
+              </div>
             </div>
             <div className="pt-2">
               <button
@@ -753,7 +819,7 @@ export default function Suppliers() {
                   <h4 className="font-bold text-slate-700 text-sm">POs placed with {supplier.name}</h4>
                   <button
                     onClick={() => openAddPo(supplier.id)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1.5 px-4 rounded-lg text-xs shadow-sm transition-colors"
+                    className="bg-slate-600 hover:bg-indigo-700 text-white font-semibold py-1.5 px-4 rounded-lg text-xs shadow-sm transition-colors"
                   >
                     + Add Purchase Order
                   </button>
@@ -765,29 +831,41 @@ export default function Suppliers() {
                       <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
                         <th className="p-3">PO ID</th>
                         <th className="p-3">Order Date</th>
-                        <th className="p-3">Received Date</th>
+                        <th className="p-3">Basis</th>
+                        <th className="p-3">Total</th>
+                        <th className="p-3">Paid</th>
+                        <th className="p-3">Due</th>
                         <th className="p-3">Status</th>
-                        <th className="p-3">Total Amount</th>
                         <th className="p-3 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
                       {sPOs.length === 0 ? (
                         <tr>
-                          <td colSpan="6" className="p-8 text-center text-slate-400">No POs recorded.</td>
+                          <td colSpan="8" className="p-8 text-center text-slate-400">No POs recorded.</td>
                         </tr>
                       ) : (
                         sPOs.map(po => (
                           <tr key={po.id} className="hover:bg-slate-50/50">
                             <td className="p-3 font-mono font-bold text-slate-700">#PO-{po.id}</td>
-                            <td className="p-3 text-slate-600">{formatDate(po.order_date)}</td>
-                            <td className="p-3 text-slate-600">{po.received_date ? formatDate(po.received_date) : '-'}</td>
+                            <td className="p-3 text-slate-600">{formatDate(po.order_date).split(',')[0]}</td>
+                            <td className="p-3">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                                po.payment_basis === 'credit'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}>
+                                {po.payment_basis || 'cash'}
+                              </span>
+                            </td>
+                            <td className="p-3 font-bold text-slate-800">{formatCurrency(po.total_amount)}</td>
+                            <td className="p-3 text-emerald-600 font-semibold">{formatCurrency(po.paid_amount || 0)}</td>
+                            <td className="p-3 text-rose-650 font-bold">{formatCurrency(po.due_amount || 0)}</td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusBadge(po.status)}`}>
                                 {po.status}
                               </span>
                             </td>
-                            <td className="p-3 font-bold text-slate-800">{formatCurrency(po.total_amount)}</td>
                             <td className="p-3 text-center space-x-2">
                               <button
                                 onClick={() => openPoDetails(po.id)}
@@ -968,7 +1046,7 @@ export default function Suppliers() {
           </button>
           <button
             onClick={() => { resetForm(); setShowAddModal(true); }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2"
+            className="bg-slate-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-sm transition-colors flex items-center space-x-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -1023,13 +1101,14 @@ export default function Suppliers() {
                   <th className="p-4">Contact Person</th>
                   <th className="p-4">Email</th>
                   <th className="p-4">Phone</th>
+                  <th className="p-4">Outstanding Due</th>
                   <th className="p-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="p-12 text-center">
+                    <td colSpan="6" className="p-12 text-center">
                       <div className="flex justify-center items-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
                       </div>
@@ -1037,7 +1116,7 @@ export default function Suppliers() {
                   </tr>
                 ) : suppliers.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="p-12 text-center text-slate-400">
+                    <td colSpan="6" className="p-12 text-center text-slate-400">
                       No suppliers listed yet. Add a supplier to begin.
                     </td>
                   </tr>
@@ -1048,6 +1127,15 @@ export default function Suppliers() {
                       <td className="p-4 text-slate-700">{supplier.contact_name || '-'}</td>
                       <td className="p-4 text-slate-600">{supplier.email || '-'}</td>
                       <td className="p-4 text-slate-600">{supplier.phone || '-'}</td>
+                      <td className="p-4 font-bold text-slate-700">
+                        {parseFloat(supplier.due_balance) > 0 ? (
+                          <span className="text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 font-extrabold">
+                            {formatCurrency(supplier.due_balance)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-semibold">-</span>
+                        )}
+                      </td>
                       <td className="p-4 text-center space-x-2">
                         <button
                           onClick={() => setSelectedSupplierId(supplier.id)}
@@ -1085,7 +1173,7 @@ export default function Suppliers() {
                     onClick={() => setPoFilterStatus(st)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg uppercase tracking-wider transition-all border ${
                       poFilterStatus === st
-                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                        ? 'bg-slate-600 border-indigo-600 text-white'
                         : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700'
                     }`}
                   >
@@ -1105,16 +1193,18 @@ export default function Suppliers() {
                     <th className="p-4">PO ID</th>
                     <th className="p-4">Supplier</th>
                     <th className="p-4">Order Date</th>
-                    <th className="p-4">Received Date</th>
+                    <th className="p-4">Basis</th>
+                    <th className="p-4">Total</th>
+                    <th className="p-4">Paid</th>
+                    <th className="p-4">Due</th>
                     <th className="p-4">Status</th>
-                    <th className="p-4">Total Amount</th>
                     <th className="p-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {loading ? (
                     <tr>
-                      <td colSpan="7" className="p-12 text-center">
+                      <td colSpan="9" className="p-12 text-center">
                         <div className="flex justify-center items-center">
                           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
                         </div>
@@ -1122,7 +1212,7 @@ export default function Suppliers() {
                     </tr>
                   ) : getFilteredPOs(purchaseOrders).length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="p-12 text-center text-slate-400">
+                      <td colSpan="9" className="p-12 text-center text-slate-400">
                         No purchase orders matching filters.
                       </td>
                     </tr>
@@ -1131,14 +1221,24 @@ export default function Suppliers() {
                       <tr key={po.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="p-4 font-mono font-bold text-slate-650">#PO-{po.id}</td>
                         <td className="p-4 font-semibold text-slate-800">{po.supplier_name}</td>
-                        <td className="p-4 text-slate-600">{formatDate(po.order_date)}</td>
-                        <td className="p-4 text-slate-600">{po.received_date ? formatDate(po.received_date) : '-'}</td>
+                        <td className="p-4 text-slate-600">{formatDate(po.order_date).split(',')[0]}</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                            po.payment_basis === 'credit'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            {po.payment_basis || 'cash'}
+                          </span>
+                        </td>
+                        <td className="p-4 font-bold text-slate-800">{formatCurrency(po.total_amount)}</td>
+                        <td className="p-4 text-emerald-600 font-semibold">{formatCurrency(po.paid_amount || 0)}</td>
+                        <td className="p-4 text-rose-650 font-bold">{formatCurrency(po.due_amount || 0)}</td>
                         <td className="p-4">
                           <span className={`px-2.5 py-0.5 rounded text-xs font-bold border ${getStatusBadge(po.status)}`}>
                             {po.status}
                           </span>
                         </td>
-                        <td className="p-4 font-extrabold text-slate-800">{formatCurrency(po.total_amount)}</td>
                         <td className="p-4 text-center space-x-2">
                           <button
                             onClick={() => openPoDetails(po.id)}
@@ -1345,7 +1445,7 @@ export default function Suppliers() {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors shadow"
+                className="px-5 py-2 bg-slate-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors shadow"
               >
                 {isEdit ? 'Save Changes' : 'Create Supplier'}
               </button>
@@ -1359,14 +1459,14 @@ export default function Suppliers() {
   // ADD PURCHASE ORDER FORM MODAL
   function renderAddPoModal() {
     const calculatePOTotal = () => {
-      return poFormData.items.reduce((sum, item) => {
-        return sum + ((parseInt(item.quantity_ordered) || 0) * (parseFloat(item.cost_price) || 0));
-      }, 0);
+      const qty = parseInt(poFormData.quantity_ordered) || 0;
+      const cost = parseFloat(poFormData.cost_price) || 0;
+      return qty * cost;
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-        <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col my-8 max-h-[85vh]">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl overflow-hidden flex flex-col">
           <div className="flex justify-between items-center pb-3 border-b border-slate-100">
             <h3 className="text-lg font-bold text-slate-800">Create Purchase Order</h3>
             <button onClick={() => setShowAddPoModal(false)} className="text-slate-400 hover:text-slate-600">
@@ -1376,185 +1476,175 @@ export default function Suppliers() {
             </button>
           </div>
 
-          <form className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Supplier *</label>
+              <select
+                value={poFormData.supplier_id}
+                onChange={(e) => setPoFormData({ ...poFormData, supplier_id: e.target.value })}
+                disabled={!!selectedSupplierId}
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+              >
+                <option value="">-- Select Supplier --</option>
+                {suppliers.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Choose Product *</label>
+              <select
+                value={poFormData.is_new ? 'new_product' : poFormData.product_id}
+                onChange={(e) => handlePoProductChange(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-medium"
+              >
+                <option value="">-- Select Existing Product --</option>
+                <option value="new_product" className="text-indigo-600 font-bold">+ New Product (Create on-the-fly)</option>
+                {productsList.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Product Name *</label>
+              <input
+                type="text"
+                value={poFormData.name}
+                onChange={(e) => setPoFormData({ ...poFormData, name: e.target.value })}
+                disabled={!poFormData.is_new}
+                required
+                placeholder="Product Name"
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50 disabled:bg-slate-50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">SKU / Code *</label>
+              <input
+                type="text"
+                value={poFormData.sku}
+                onChange={(e) => setPoFormData({ ...poFormData, sku: e.target.value })}
+                disabled={!poFormData.is_new}
+                required
+                placeholder="SKU Code"
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50 disabled:bg-slate-50"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Supplier *</label>
-                <select
-                  value={poFormData.supplier_id}
-                  onChange={(e) => setPoFormData({ ...poFormData, supplier_id: e.target.value })}
-                  disabled={!!selectedSupplierId}
-                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">-- Select Supplier --</option>
-                  {suppliers.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cost Price (৳) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={poFormData.cost_price}
+                  onChange={(e) => setPoFormData({ ...poFormData, cost_price: e.target.value })}
+                  disabled={!poFormData.is_new}
+                  required
+                  placeholder="0.00"
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50 disabled:bg-slate-50"
+                />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes / Instructions</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Sale Price (৳) *</label>
                 <input
-                  type="text"
-                  value={poFormData.notes}
-                  onChange={(e) => setPoFormData({ ...poFormData, notes: e.target.value })}
-                  placeholder="e.g. Rush order for holiday stock"
-                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                  type="number"
+                  step="0.01"
+                  value={poFormData.selling_price}
+                  onChange={(e) => setPoFormData({ ...poFormData, selling_price: e.target.value })}
+                  disabled={!poFormData.is_new}
+                  required
+                  placeholder="0.00"
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50 disabled:bg-slate-50"
                 />
               </div>
             </div>
 
-            {/* PO Line Items */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Line Items</h4>
-                <button
-                  type="button"
-                  onClick={addPoLine}
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                >
-                  + Add Line Item
-                </button>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quantity to Order *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={poFormData.quantity_ordered}
+                  onChange={(e) => setPoFormData({ ...poFormData, quantity_ordered: e.target.value })}
+                  required
+                  placeholder="1"
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                />
               </div>
-
-              <div className="space-y-2">
-                {poFormData.items.map((item, idx) => (
-                  <div key={idx} className="flex flex-col sm:flex-row items-end gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="flex-1 w-full">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Product *</label>
-                      {item.is_new ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">New Product</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = [...poFormData.items];
-                                updated[idx].is_new = false;
-                                updated[idx].name = '';
-                                updated[idx].sku = '';
-                                setPoFormData({ ...poFormData, items: updated });
-                              }}
-                              className="text-[10px] font-bold text-slate-500 hover:text-indigo-600 hover:underline"
-                            >
-                              Choose Existing
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <input
-                              type="text"
-                              required
-                              value={item.name || ''}
-                              onChange={(e) => updatePoLineField(idx, 'name', e.target.value)}
-                              placeholder="Product Name"
-                              className="w-full border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                            />
-                            <input
-                              type="text"
-                              required
-                              value={item.sku || ''}
-                              onChange={(e) => updatePoLineField(idx, 'sku', e.target.value)}
-                              placeholder="SKU Code"
-                              className="w-full border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <select
-                          value={item.product_id}
-                          onChange={(e) => {
-                            if (e.target.value === 'new_product') {
-                              const updated = [...poFormData.items];
-                              updated[idx].is_new = true;
-                              updated[idx].product_id = '';
-                              updated[idx].name = '';
-                              updated[idx].sku = '';
-                              setPoFormData({ ...poFormData, items: updated });
-                            } else {
-                              updatePoLineField(idx, 'product_id', e.target.value);
-                            }
-                          }}
-                          className="w-full border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">-- Select Product --</option>
-                          <option value="new_product" className="text-indigo-600 font-bold">+ New Product (Create on-the-fly)</option>
-                          {productsList.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-
-                    <div className="w-full sm:w-20">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Qty Ordered</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity_ordered}
-                        onChange={(e) => updatePoLineField(idx, 'quantity_ordered', parseInt(e.target.value) || 0)}
-                        className="w-full border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                      />
-                    </div>
-
-                    <div className="w-full sm:w-24">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Unit Cost (৳)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.cost_price}
-                        onChange={(e) => updatePoLineField(idx, 'cost_price', parseFloat(e.target.value) || 0)}
-                        className="w-full border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                      />
-                    </div>
-
-                    <div className="w-full sm:w-24">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Sale Price (৳)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.selling_price || 0.00}
-                        onChange={(e) => updatePoLineField(idx, 'selling_price', parseFloat(e.target.value) || 0)}
-                        className="w-full border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                      />
-                    </div>
-
-                    {(() => {
-                      const itemProfit = parseFloat(item.selling_price || 0) - parseFloat(item.cost_price || 0);
-                      const itemMargin = item.selling_price > 0 ? (itemProfit / parseFloat(item.selling_price)) * 100 : 0;
-                      return (
-                        <div className="w-full sm:w-32 text-center pb-2.5">
-                          <span className={`inline-block text-[9px] font-bold px-2 py-1 rounded-lg border ${
-                            itemProfit >= 0
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-rose-50 text-rose-700 border-rose-200'
-                          }`}>
-                            Profit: ৳{itemProfit.toFixed(2)} ({itemMargin.toFixed(0)}%)
-                          </span>
-                        </div>
-                      );
-                    })()}
-
-                    <button
-                      type="button"
-                      disabled={poFormData.items.length === 1}
-                      onClick={() => removePoLine(idx)}
-                      className="p-2 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg disabled:opacity-40 mb-1"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Unit *</label>
+                <select
+                  value={poFormData.unit}
+                  onChange={(e) => setPoFormData({ ...poFormData, unit: e.target.value })}
+                  disabled={!poFormData.is_new}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-medium"
+                >
+                  <option value="piece">Piece</option>
+                  <option value="kg">kg</option>
+                  <option value="gm">gm</option>
+                  <option value="liter">Liter</option>
+                </select>
               </div>
             </div>
 
-            {/* Total display & submit actions */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Payment Basis *</label>
+                <select
+                  value={poFormData.payment_basis}
+                  onChange={(e) => setPoFormData({ ...poFormData, payment_basis: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-medium"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="credit">Credit</option>
+                </select>
+              </div>
+              <div>
+                {poFormData.payment_basis === 'credit' && (
+                  <>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Initial Paid Amount (৳)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={calculatePOTotal()}
+                      value={poFormData.paid_amount}
+                      onChange={(e) => setPoFormData({ ...poFormData, paid_amount: e.target.value })}
+                      placeholder="0.00"
+                      className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes / Instructions</label>
+              <input
+                type="text"
+                value={poFormData.notes}
+                onChange={(e) => setPoFormData({ ...poFormData, notes: e.target.value })}
+                placeholder="e.g. Rush order for holiday stock"
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 mb-4"
+              />
+            </div>
+
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div className="text-sm font-bold text-slate-700">
-                Running PO Total: <span className="text-lg font-black text-slate-800">{formatCurrency(calculatePOTotal())}</span>
+              <div className="text-sm font-bold text-slate-700 flex flex-col space-y-1">
+                <div>
+                  Running PO Total: <span className="text-lg font-black text-slate-800">{formatCurrency(calculatePOTotal())}</span>
+                </div>
+                {poFormData.payment_basis === 'credit' && (
+                  <div className="text-xs text-slate-500">
+                    Remaining Due: <span className="text-sm font-bold text-rose-650">
+                      {formatCurrency(calculatePOTotal() - (parseFloat(poFormData.paid_amount || 0)))}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="flex space-x-3 w-full sm:w-auto">
                 <button
@@ -1569,12 +1659,12 @@ export default function Suppliers() {
                   onClick={(e) => handlePoSubmit(e, 'draft')}
                   className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
                 >
-                  Save as Draft
+                  Draft
                 </button>
                 <button
                   type="button"
                   onClick={(e) => handlePoSubmit(e, 'ordered')}
-                  className="w-full sm:w-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors shadow"
+                  className="w-full sm:w-auto px-5 py-2 bg-slate-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors shadow"
                 >
                   Place Order
                 </button>
@@ -1605,7 +1695,7 @@ export default function Suppliers() {
           </div>
 
           <div className="mt-4 space-y-4 overflow-y-auto flex-1 pr-1 text-sm">
-            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
               <div>
                 <span className="block text-xs font-bold text-slate-400">SUPPLIER</span>
                 <span className="font-semibold text-slate-700">{selectedPo.supplier_name}</span>
@@ -1618,6 +1708,16 @@ export default function Suppliers() {
                 </span>
               </div>
               <div>
+                <span className="block text-xs font-bold text-slate-400">PAYMENT BASIS</span>
+                <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold border mt-1 uppercase ${
+                  selectedPo.payment_basis === 'credit'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}>
+                  {selectedPo.payment_basis || 'cash'}
+                </span>
+              </div>
+              <div>
                 <span className="block text-xs font-bold text-slate-400">ORDER DATE</span>
                 <span className="font-semibold text-slate-700">{formatDate(selectedPo.order_date)}</span>
               </div>
@@ -1627,8 +1727,14 @@ export default function Suppliers() {
                   {selectedPo.received_date ? formatDate(selectedPo.received_date) : '-'}
                 </span>
               </div>
+              <div>
+                <span className="block text-xs font-bold text-slate-400">PAID VS DUE</span>
+                <span className="font-semibold text-slate-700 block mt-1">
+                  {formatCurrency(selectedPo.paid_amount || 0)} / <span className={parseFloat(selectedPo.due_amount) > 0 ? "text-rose-600 font-extrabold" : "text-slate-500"}>{formatCurrency(selectedPo.due_amount || 0)}</span>
+                </span>
+              </div>
               {selectedPo.notes && (
-                <div className="col-span-2">
+                <div className="col-span-2 md:col-span-3">
                   <span className="block text-xs font-bold text-slate-400">NOTES</span>
                   <span className="font-medium text-slate-650 italic">"{selectedPo.notes}"</span>
                 </div>
@@ -1692,8 +1798,37 @@ export default function Suppliers() {
               </div>
             </div>
 
-            <div className="text-right text-sm font-bold text-slate-700">
-              Total Order Value: <span className="text-lg font-black text-slate-800">{formatCurrency(selectedPo.total_amount)}</span>
+            <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+              {selectedPo.payment_basis === 'credit' && parseFloat(selectedPo.due_amount) > 0 && ['ordered', 'received'].includes(selectedPo.status) && (
+                <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 flex-1">
+                  <h4 className="text-xs font-bold text-rose-700 uppercase tracking-wider mb-2">Record Payment to Supplier</h4>
+                  <form onSubmit={handlePayPoDue} className="flex items-center space-x-3">
+                    <div className="relative flex-1 max-w-xs">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">৳</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={parseFloat(selectedPo.due_amount)}
+                        value={poPaymentAmount}
+                        onChange={(e) => setPoPaymentAmount(e.target.value)}
+                        placeholder="0.00"
+                        required
+                        className="w-full pl-7 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-semibold py-1.5 px-4 rounded-lg text-xs shadow-sm transition-colors"
+                    >
+                      Pay Supplier
+                    </button>
+                  </form>
+                </div>
+              )}
+              <div className="text-right text-sm font-bold text-slate-700 md:ml-auto self-end">
+                Total Order Value: <span className="text-lg font-black text-slate-800">{formatCurrency(selectedPo.total_amount)}</span>
+              </div>
             </div>
           </div>
 
@@ -1715,7 +1850,7 @@ export default function Suppliers() {
             {selectedPo.status === 'draft' && (
               <button
                 onClick={() => updatePoStatus(selectedPo.id, 'ordered')}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors shadow"
+                className="px-4 py-2 bg-slate-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors shadow"
               >
                 Place Order
               </button>

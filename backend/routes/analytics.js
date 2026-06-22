@@ -17,8 +17,8 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
   const { start_date, end_date } = req.query;
 
   try {
-    // 1. Calculate Sales Revenue
-    let salesQuery = 'SELECT SUM(final_amount) AS total_sales, COUNT(id) AS sales_count FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
+    // 1. Calculate Sales Revenue (Accrual & Cash Received)
+    let salesQuery = 'SELECT SUM(final_amount) AS total_sales, SUM(paid_amount) AS total_paid, COUNT(id) AS sales_count FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
     const salesParams = hasShop ? [shopId] : [];
     if (start_date && end_date) {
       salesQuery += ' AND created_at BETWEEN ? AND ?';
@@ -26,6 +26,7 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
     }
     const [salesRows] = await db.query(salesQuery, salesParams);
     const totalSales = parseFloat(salesRows[0].total_sales || 0);
+    const totalSalesCash = parseFloat(salesRows[0].total_paid || 0);
     const salesCount = parseInt(salesRows[0].sales_count || 0);
 
     // 2. Calculate Cost of Goods Sold (COGS) based on actual sales items and cost price of products
@@ -43,15 +44,16 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
     const [cogsRows] = await db.query(cogsQuery, cogsParams);
     const totalCOGS = parseFloat(cogsRows[0].cogs || 0);
 
-    // 3. Calculate Product Purchasing Costs (Received POs)
-    let poQuery = "SELECT SUM(total_amount) AS total_purchased FROM purchase_orders WHERE " + (hasShop ? "shop_id = ?" : "1=1") + " AND status = 'received'";
+    // 3. Calculate Product Purchasing Costs (Received & Ordered POs - Accrual vs Cash)
+    let poQuery = "SELECT SUM(total_amount) AS total_purchased, SUM(paid_amount) AS total_paid FROM purchase_orders WHERE " + (hasShop ? "shop_id = ?" : "1=1") + " AND status IN ('ordered', 'received')";
     const poParams = hasShop ? [shopId] : [];
     if (start_date && end_date) {
-      poQuery += ' AND received_date BETWEEN ? AND ?';
-      poParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+      poQuery += ' AND (received_date BETWEEN ? AND ? OR (received_date IS NULL AND order_date BETWEEN ? AND ?))';
+      poParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`, `${start_date} 00:00:00`, `${end_date} 23:59:59`);
     }
     const [poRows] = await db.query(poQuery, poParams);
     const totalPurchasing = parseFloat(poRows[0].total_purchased || 0);
+    const totalPurchasingCash = parseFloat(poRows[0].total_paid || 0);
 
     // 4. Calculate Other Costs
     let otherQuery = 'SELECT SUM(amount) AS total_other_costs FROM other_costs WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
@@ -73,9 +75,14 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
     const [wastageRows] = await db.query(wastageQuery, wastageParams);
     const totalWastage = parseFloat(wastageRows[0].total_wastage || 0);
 
+    // 6. Calculate Supplier Due Balance (Outstanding credit/payable)
+    let supplierDueQuery = 'SELECT SUM(due_balance) AS total_due FROM suppliers WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
+    const [supplierDueRows] = await db.query(supplierDueQuery, hasShop ? [shopId] : []);
+    const totalSupplierDue = parseFloat(supplierDueRows[0].total_due || 0);
+
     // Calculate Net Profits
     const netProfitCOGS = totalSales - totalCOGS - totalOther - totalWastage;
-    const netProfitCashflow = totalSales - totalPurchasing - totalOther - totalWastage;
+    const netProfitCashflow = totalSalesCash - totalPurchasingCash - totalOther - totalWastage;
 
     // Calculate 7-Day Trend for Trading Profitability (COGS Basis) and Cashflow
     const trendMap = {};
@@ -83,14 +90,28 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
-      trendMap[dateStr] = { date: dateStr, sales_revenue: 0, cost_of_goods_sold: 0, other_costs: 0, wastage_loss: 0, inventory_purchasing_cost: 0, net_profit_cogs: 0, net_profit_cashflow: 0 };
+      trendMap[dateStr] = { 
+        date: dateStr, 
+        sales_revenue: 0, 
+        sales_cash_received: 0, 
+        cost_of_goods_sold: 0, 
+        other_costs: 0, 
+        wastage_loss: 0, 
+        inventory_purchasing_cost: 0, 
+        inventory_purchasing_cash_paid: 0, 
+        net_profit_cogs: 0, 
+        net_profit_cashflow: 0 
+      };
     }
 
     // Query daily sales
-    let trendSalesQuery = 'SELECT DATE_FORMAT(created_at, "%Y-%m-%d") AS date, SUM(final_amount) AS revenue FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1') + ' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(created_at)';
+    let trendSalesQuery = 'SELECT DATE_FORMAT(created_at, "%Y-%m-%d") AS date, SUM(final_amount) AS revenue, SUM(paid_amount) AS cash_received FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1') + ' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(created_at)';
     const [trendSalesRows] = await db.query(trendSalesQuery, salesParams.slice(0, hasShop ? 1 : 0));
     trendSalesRows.forEach(row => {
-      if (trendMap[row.date]) trendMap[row.date].sales_revenue = parseFloat(row.revenue || 0);
+      if (trendMap[row.date]) {
+        trendMap[row.date].sales_revenue = parseFloat(row.revenue || 0);
+        trendMap[row.date].sales_cash_received = parseFloat(row.cash_received || 0);
+      }
     });
 
     // Query daily COGS
@@ -121,26 +142,32 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
     });
 
     // Query daily PO purchasing
-    let trendPoQuery = 'SELECT DATE_FORMAT(received_date, "%Y-%m-%d") AS date, SUM(total_amount) AS total FROM purchase_orders WHERE ' + (hasShop ? 'shop_id = ?' : '1=1') + ' AND status = \'received\' AND received_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(received_date)';
+    let trendPoQuery = 'SELECT DATE_FORMAT(COALESCE(received_date, order_date), "%Y-%m-%d") AS date, SUM(total_amount) AS total, SUM(paid_amount) AS cash_paid FROM purchase_orders WHERE ' + (hasShop ? 'shop_id = ?' : '1=1') + ' AND status IN (\'ordered\', \'received\') AND COALESCE(received_date, order_date) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(COALESCE(received_date, order_date))';
     const [trendPoRows] = await db.query(trendPoQuery, poParams.slice(0, hasShop ? 1 : 0));
     trendPoRows.forEach(row => {
-      if (trendMap[row.date]) trendMap[row.date].inventory_purchasing_cost = parseFloat(row.total || 0);
+      if (trendMap[row.date]) {
+        trendMap[row.date].inventory_purchasing_cost = parseFloat(row.total || 0);
+        trendMap[row.date].inventory_purchasing_cash_paid = parseFloat(row.cash_paid || 0);
+      }
     });
 
     // Calculate daily Net Profit (Trading & Cashflow)
     Object.keys(trendMap).forEach(dateStr => {
       const d = trendMap[dateStr];
       d.net_profit_cogs = d.sales_revenue - d.cost_of_goods_sold - d.other_costs - d.wastage_loss;
-      d.net_profit_cashflow = d.sales_revenue - d.inventory_purchasing_cost - d.other_costs - d.wastage_loss;
+      d.net_profit_cashflow = d.sales_cash_received - d.inventory_purchasing_cash_paid - d.other_costs - d.wastage_loss;
     });
 
     const trend = Object.values(trendMap);
 
     res.json({
       sales_revenue: totalSales,
+      sales_cash_received: totalSalesCash,
       sales_count: salesCount,
       cost_of_goods_sold: totalCOGS,
       inventory_purchasing_cost: totalPurchasing,
+      inventory_purchasing_cash_paid: totalPurchasingCash,
+      supplier_due: totalSupplierDue,
       other_costs: totalOther,
       wastage_loss: totalWastage,
       net_profit_cogs: netProfitCOGS,
@@ -275,173 +302,6 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Analytics fetch error:', error);
     res.status(500).json({ error: 'Server error generating dashboard analytics.' });
-  }
-});
-
-/**
- * @desc    Fetch balance sheet data: assets (cash, inventory, receivables), liabilities, and equity
- * @access  Private (super_admin, shop_admin)
- */
-router.get('/balance-sheet', authorize(['super_admin', 'shop_admin']), async (req, res) => {
-  const isSuperAdmin = req.user.role === 'super_admin';
-  let targetShopId = req.shopId;
-  if (isSuperAdmin && req.query.shop_id) {
-    targetShopId = parseInt(req.query.shop_id);
-  }
-  const hasShop = targetShopId !== null && targetShopId !== undefined;
-  const queryParams = hasShop ? [targetShopId] : [];
-  const { end_date } = req.query;
-
-  try {
-    // 1. ASSETS
-    
-    // 1a. Cash & Cash Equivalents (Sales paid - POs received - Other Costs)
-    let salesPaidQuery = 'SELECT SUM(paid_amount) AS total_paid FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
-    const salesPaidParams = [...queryParams];
-    if (end_date) {
-      salesPaidQuery += ' AND created_at <= ?';
-      salesPaidParams.push(`${end_date} 23:59:59`);
-    }
-    const [salesPaidRows] = await db.query(salesPaidQuery, salesPaidParams);
-    const totalSalesPaid = parseFloat(salesPaidRows[0].total_paid || 0);
-
-    let poQuery = "SELECT SUM(total_amount) AS total_purchased FROM purchase_orders WHERE status = 'received' AND " + (hasShop ? 'shop_id = ?' : '1=1');
-    const poParams = [...queryParams];
-    if (end_date) {
-      poQuery += ' AND received_date <= ?';
-      poParams.push(`${end_date} 23:59:59`);
-    }
-    const [poRows] = await db.query(poQuery, poParams);
-    const totalPurchased = parseFloat(poRows[0].total_purchased || 0);
-
-    let otherQuery = 'SELECT SUM(amount) AS total_other FROM other_costs WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
-    const otherParams = [...queryParams];
-    if (end_date) {
-      otherQuery += ' AND cost_date <= ?';
-      otherParams.push(end_date);
-    }
-    const [otherRows] = await db.query(otherQuery, otherParams);
-    const totalOther = parseFloat(otherRows[0].total_other || 0);
-
-    const cashOnHand = totalSalesPaid - totalPurchased - totalOther;
-
-    // 1b. Inventory Asset Value (Current Stock * cost_price)
-    // Reconstruct historical inventory value up to end_date:
-    // Current Inventory Value - POs received after end_date + COGS after end_date + Wastage after end_date
-    const liveInventoryValQuery = 'SELECT SUM(stock_quantity * cost_price) AS total_inventory FROM products WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
-    const [liveInventoryRows] = await db.query(liveInventoryValQuery, queryParams);
-    const liveInventoryValue = parseFloat(liveInventoryRows[0].total_inventory || 0);
-
-    let totalInventoryValue = liveInventoryValue;
-    if (end_date) {
-      // POs received after end_date
-      let poAfterQuery = `
-        SELECT SUM(poi.quantity_received * poi.cost_price) AS val 
-        FROM purchase_order_items poi 
-        JOIN purchase_orders po ON poi.purchase_order_id = po.id 
-        WHERE po.status = 'received' AND po.received_date > ? AND ` + (hasShop ? 'po.shop_id = ?' : '1=1');
-      const [poAfterRows] = await db.query(poAfterQuery, [`${end_date} 23:59:59`, ...queryParams]);
-      const poAfterVal = parseFloat(poAfterRows[0].val || 0);
-
-      // COGS sold after end_date
-      let cogsAfterQuery = `
-        SELECT SUM(si.quantity * p.cost_price) AS val 
-        FROM sale_items si 
-        JOIN products p ON si.product_id = p.id 
-        JOIN sales s ON si.sale_id = s.id 
-        WHERE s.created_at > ? AND ` + (hasShop ? 's.shop_id = ?' : '1=1');
-      const [cogsAfterRows] = await db.query(cogsAfterQuery, [`${end_date} 23:59:59`, ...queryParams]);
-      const cogsAfterVal = parseFloat(cogsAfterRows[0].val || 0);
-
-      // Wastage after end_date
-      let wastageAfterQuery = 'SELECT SUM(cost_loss) AS val FROM wastages WHERE adjusted_at > ? AND ' + (hasShop ? 'shop_id = ?' : '1=1');
-      const [wastageAfterRows] = await db.query(wastageAfterQuery, [end_date, ...queryParams]);
-      const wastageAfterVal = parseFloat(wastageAfterRows[0].val || 0);
-
-      totalInventoryValue = liveInventoryValue - poAfterVal + cogsAfterVal + wastageAfterVal;
-    }
-
-    // 1c. Accounts Receivable (Customer Dues up to end_date)
-    let receivableQuery = 'SELECT SUM(due_amount) AS total_receivable FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
-    const receivableParams = [...queryParams];
-    if (end_date) {
-      receivableQuery += ' AND created_at <= ?';
-      receivableParams.push(`${end_date} 23:59:59`);
-    }
-    const [receivableRows] = await db.query(receivableQuery, receivableParams);
-    const totalReceivable = parseFloat(receivableRows[0].total_receivable || 0);
-
-    const totalAssets = cashOnHand + totalInventoryValue + totalReceivable;
-
-    // 2. LIABILITIES
-    const accountsPayable = 0.0;
-    const totalLiabilities = accountsPayable;
-
-    // 3. OWNER'S EQUITY
-    
-    // 3a. Retained Earnings components (Sales total - COGS total - Other costs total - Wastage total)
-    let salesTotalQuery = 'SELECT SUM(final_amount) AS total_sales FROM sales WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
-    const salesTotalParams = [...queryParams];
-    if (end_date) {
-      salesTotalQuery += ' AND created_at <= ?';
-      salesTotalParams.push(`${end_date} 23:59:59`);
-    }
-    const [salesTotalRows] = await db.query(salesTotalQuery, salesTotalParams);
-    const totalSales = parseFloat(salesTotalRows[0].total_sales || 0);
-
-    let cogsQuery = `
-      SELECT SUM(si.quantity * p.cost_price) AS total_cogs 
-      FROM sale_items si 
-      JOIN products p ON si.product_id = p.id
-      JOIN sales s ON si.sale_id = s.id
-      WHERE ` + (hasShop ? 'si.shop_id = ?' : '1=1');
-    const cogsParams = [...queryParams];
-    if (end_date) {
-      cogsQuery += ' AND s.created_at <= ?';
-      cogsParams.push(`${end_date} 23:59:59`);
-    }
-    const [cogsRows] = await db.query(cogsQuery, cogsParams);
-    const totalCOGS = parseFloat(cogsRows[0].total_cogs || 0);
-
-    let wastageQuery = 'SELECT SUM(cost_loss) AS total_wastage FROM wastages WHERE ' + (hasShop ? 'shop_id = ?' : '1=1');
-    const wastageParams = [...queryParams];
-    if (end_date) {
-      wastageQuery += ' AND adjusted_at <= ?';
-      wastageParams.push(end_date);
-    }
-    const [wastageRows] = await db.query(wastageQuery, wastageParams);
-    const totalWastage = parseFloat(wastageRows[0].total_wastage || 0);
-
-    const retainedEarnings = totalSales - totalCOGS - totalOther - totalWastage;
-
-    // 3b. Owner's Capital (balancing figure: Assets - Liabilities - Retained Earnings)
-    const ownersCapital = totalAssets - totalLiabilities - retainedEarnings;
-    const totalEquity = ownersCapital + retainedEarnings;
-    
-    const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
-
-    res.json({
-      asOfDate: end_date || new Date().toISOString().split('T')[0],
-      assets: {
-        cash_on_hand: cashOnHand,
-        inventory_value: totalInventoryValue,
-        accounts_receivable: totalReceivable,
-        total_assets: totalAssets
-      },
-      liabilities: {
-        accounts_payable: accountsPayable,
-        total_liabilities: totalLiabilities
-      },
-      equity: {
-        retained_earnings: retainedEarnings,
-        owners_capital: ownersCapital,
-        total_equity: totalEquity
-      },
-      total_liabilities_and_equity: totalLiabilitiesAndEquity
-    });
-  } catch (error) {
-    console.error('Balance sheet analytics error:', error);
-    res.status(500).json({ error: 'Server error generating balance sheet.' });
   }
 });
 

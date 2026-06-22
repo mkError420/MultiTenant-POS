@@ -643,10 +643,27 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
       )}
 
       {/* 2. Page Title Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">POS Checkout</h2>
           <p className="text-sm text-slate-500">Scan SKU or search item names to build a customer cart</p>
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowHeldBillsModal(true)}
+            className="relative bg-white hover:bg-slate-50 text-slate-700 font-semibold py-2.5 px-4 border border-slate-200 rounded-xl text-sm shadow-xs transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <span>Resume Held Bills</span>
+            {heldBills.filter(b => b.status === 'held').length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-extrabold w-5 h-5 rounded-full flex items-center justify-center border border-white animate-pulse">
+                {heldBills.filter(b => b.status === 'held').length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -748,7 +765,7 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
                                 <button
                                   onClick={() => addToCart(product)}
                                   disabled={isOutOfStock}
-                                  className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-xs"
+                                  className="bg-slate-600 hover:bg-indigo-700 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-xs"
                                 >
                                   {isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
                                 </button>
@@ -782,7 +799,7 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
         </div>
         <button
           onClick={() => setMobileCartOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl shadow-lg transition-colors flex items-center space-x-2"
+          className="bg-slate-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl shadow-lg transition-colors flex items-center space-x-2"
         >
           <span>View Cart</span>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1080,7 +1097,7 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
               <div className="mt-8 space-y-2">
                 <button
                   onClick={() => handlePrint(previewMode)}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center justify-center space-x-2"
+                  className="w-full bg-slate-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center justify-center space-x-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -1359,7 +1376,120 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
         </div>
       )}
 
-      {/* Held Bills Modal removed - handled by dedicated Held Bills page */}
+      {/* --- RESUME HELD BILLS MODAL --- */}
+      {showHeldBillsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Resume Held Bills</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Select a suspended cart to load back into checkout</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowHeldBillsModal(false)} 
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* List Container */}
+            <div className="mt-4 flex-1 overflow-y-auto space-y-3 pr-1">
+              {heldBills.filter(b => b.status === 'held').length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-sm">
+                  No active held bills found.
+                </div>
+              ) : (
+                heldBills
+                  .filter(b => b.status === 'held')
+                  .map((bill) => {
+                    let itemsList = [];
+                    try {
+                      itemsList = typeof bill.items === 'string' ? JSON.parse(bill.items) : bill.items;
+                    } catch (e) {
+                      itemsList = [];
+                    }
+                    const totalQty = itemsList.reduce((sum, item) => sum + item.quantity, 0);
+                    const isDueTracker = itemsList.length === 0;
+
+                    return (
+                      <div 
+                        key={bill.id} 
+                        className="p-4 border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors bg-slate-50/50 flex flex-col sm:flex-row justify-between sm:items-center gap-4 text-left"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-mono text-xs font-extrabold text-indigo-650 bg-indigo-50 px-2 py-0.5 rounded">
+                              #{bill.id}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {new Date(bill.created_at).toLocaleString()}
+                            </span>
+                            {isDueTracker ? (
+                              <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-100">
+                                Due Tracker (৳{parseFloat(bill.due_amount || 0).toFixed(2)})
+                              </span>
+                            ) : (
+                              <span className="bg-amber-50 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-100">
+                                Suspended Cart ({totalQty} items)
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm font-semibold text-slate-700">
+                            Ref: {bill.notes || 'No notes'}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Customer: {bill.customer_name || 'Walk-in'} | Cashier: {bill.staff_name || 'System'}
+                          </div>
+                          {!isDueTracker && itemsList.length > 0 && (
+                            <div className="text-[11px] text-slate-450 mt-1 truncate max-w-md">
+                              Items: {itemsList.map(item => `${item.name} (x${item.quantity})`).join(', ')}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => handleResumeHeldBill(bill)}
+                            disabled={isDueTracker}
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-2 px-4 rounded-xl text-xs shadow-sm transition-colors"
+                            title={isDueTracker ? "Cannot resume a due payment tracker here" : "Resume Cart"}
+                          >
+                            Resume
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteHeldBill(bill.id)}
+                            className="text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-rose-100 p-2 rounded-xl transition-colors"
+                            title="Discard Held Bill"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowHeldBillsModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -1679,7 +1809,7 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
                   onClick={() => setPaymentMethod(method)}
                   className={`py-1.5 px-2 rounded-lg text-xs font-semibold border text-center transition-all ${
                     paymentMethod === method
-                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                      ? 'bg-slate-600 border-indigo-600 text-white shadow-sm'
                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
@@ -1706,7 +1836,7 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
             <button
               onClick={handleCheckout}
               disabled={cart.length === 0 || submitting}
-              className="col-span-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex justify-center items-center space-x-2"
+              className="col-span-2 bg-slate-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex justify-center items-center space-x-2"
             >
               {submitting ? (
                 <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>

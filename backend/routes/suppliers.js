@@ -113,7 +113,7 @@ router.get('/cost-price-logs', async (req, res) => {
  */
 router.post('/purchase-orders', authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
-  const { supplier_id, status, notes, items } = req.body;
+  const { supplier_id, status, notes, items, payment_basis, paid_amount } = req.body;
 
   if (!supplier_id || !items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Supplier ID and order items are required.' });
@@ -128,12 +128,25 @@ router.post('/purchase-orders', authorize(['shop_admin']), async (req, res) => {
       totalAmount += (item.quantity_ordered || 0) * (parseFloat(item.cost_price) || 0);
     }
 
+    const finalBasis = payment_basis === 'credit' ? 'credit' : 'cash';
+    let finalPaid = finalBasis === 'credit' ? parseFloat(paid_amount || 0) : totalAmount;
+    if (finalPaid < 0) finalPaid = 0;
+    if (finalPaid > totalAmount) finalPaid = totalAmount;
+    const due_amount = totalAmount - finalPaid;
+
     const [poResult] = await conn.query(
-      `INSERT INTO purchase_orders (shop_id, supplier_id, status, total_amount, notes) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [shopId, supplier_id, status || 'draft', totalAmount, notes || null]
+      `INSERT INTO purchase_orders (shop_id, supplier_id, status, total_amount, notes, payment_basis, paid_amount, due_amount) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [shopId, supplier_id, status || 'draft', totalAmount, notes || null, finalBasis, finalPaid, due_amount]
     );
     const poId = poResult.insertId;
+
+    if (finalBasis === 'credit' && due_amount > 0 && (status === 'ordered' || status === 'received')) {
+      await conn.query(
+        'UPDATE suppliers SET due_balance = due_balance + ? WHERE id = ? AND shop_id = ?',
+        [due_amount, supplier_id, shopId]
+      );
+    }
 
     for (const item of items) {
       let productId = item.product_id;
@@ -216,14 +229,14 @@ router.get('/purchase-orders/:id', async (req, res) => {
 router.put('/purchase-orders/:id', authorize(['shop_admin']), async (req, res) => {
   const shopId = req.shopId;
   const poId = req.params.id;
-  const { notes, items, status } = req.body;
+  const { notes, items, status, payment_basis, paid_amount } = req.body;
 
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
 
     const [existing] = await conn.query(
-      'SELECT status FROM purchase_orders WHERE id = ? AND shop_id = ?',
+      'SELECT status, total_amount, payment_basis, paid_amount, supplier_id FROM purchase_orders WHERE id = ? AND shop_id = ?',
       [poId, shopId]
     );
 
@@ -231,7 +244,8 @@ router.put('/purchase-orders/:id', authorize(['shop_admin']), async (req, res) =
       return res.status(404).json({ error: 'Purchase Order not found.' });
     }
 
-    if (existing[0].status !== 'draft') {
+    const po = existing[0];
+    if (po.status !== 'draft') {
       return res.status(400).json({ error: 'Only draft Purchase Orders can be modified.' });
     }
 
@@ -270,14 +284,31 @@ router.put('/purchase-orders/:id', authorize(['shop_admin']), async (req, res) =
       }
     }
 
+    const finalBasis = payment_basis !== undefined ? payment_basis : po.payment_basis;
+    const currentTotal = totalAmount > 0 ? totalAmount : parseFloat(po.total_amount);
+    let finalPaid = finalBasis === 'credit' ? (paid_amount !== undefined ? parseFloat(paid_amount) : parseFloat(po.paid_amount)) : currentTotal;
+    if (finalPaid < 0) finalPaid = 0;
+    if (finalPaid > currentTotal) finalPaid = currentTotal;
+    const finalDue = finalBasis === 'credit' ? currentTotal - finalPaid : 0.00;
+
     await conn.query(
       `UPDATE purchase_orders 
        SET notes = COALESCE(?, notes), 
            status = COALESCE(?, status), 
-           total_amount = CASE WHEN ? > 0 THEN ? ELSE total_amount END
+           total_amount = CASE WHEN ? > 0 THEN ? ELSE total_amount END,
+           payment_basis = ?,
+           paid_amount = ?,
+           due_amount = ?
        WHERE id = ? AND shop_id = ?`,
-      [notes || null, status || null, totalAmount, totalAmount, poId, shopId]
+      [notes || null, status || null, totalAmount, totalAmount, finalBasis, finalPaid, finalDue, poId, shopId]
     );
+
+    if (finalBasis === 'credit' && finalDue > 0 && (status === 'ordered' || status === 'received')) {
+      await conn.query(
+        'UPDATE suppliers SET due_balance = due_balance + ? WHERE id = ? AND shop_id = ?',
+        [finalDue, po.supplier_id, shopId]
+      );
+    }
 
     await conn.commit();
     res.json({ message: 'Purchase Order updated successfully.' });
@@ -330,6 +361,12 @@ router.put('/purchase-orders/:id/status', authorize(['shop_admin']), async (req,
         'UPDATE purchase_orders SET status = ?, notes = COALESCE(?, notes) WHERE id = ? AND shop_id = ?',
         ['cancelled', notes || null, poId, shopId]
       );
+      if (po.payment_basis === 'credit' && po.due_amount > 0 && (po.status === 'ordered' || po.status === 'received')) {
+        await conn.query(
+          'UPDATE suppliers SET due_balance = GREATEST(due_balance - ?, 0) WHERE id = ? AND shop_id = ?',
+          [po.due_amount, po.supplier_id, shopId]
+        );
+      }
       await conn.commit();
       return res.json({ message: 'Purchase Order cancelled.' });
     }
@@ -339,6 +376,12 @@ router.put('/purchase-orders/:id/status', authorize(['shop_admin']), async (req,
         'UPDATE purchase_orders SET status = ?, notes = COALESCE(?, notes) WHERE id = ? AND shop_id = ?',
         ['ordered', notes || null, poId, shopId]
       );
+      if (po.status === 'draft' && po.payment_basis === 'credit' && po.due_amount > 0) {
+        await conn.query(
+          'UPDATE suppliers SET due_balance = due_balance + ? WHERE id = ? AND shop_id = ?',
+          [po.due_amount, po.supplier_id, shopId]
+        );
+      }
       await conn.commit();
       return res.json({ message: 'Purchase Order status set to Ordered.' });
     }
@@ -354,6 +397,13 @@ router.put('/purchase-orders/:id/status', authorize(['shop_admin']), async (req,
          WHERE id = ? AND shop_id = ?`,
         [notes || null, poId, shopId]
       );
+
+      if (po.status === 'draft' && po.payment_basis === 'credit' && po.due_amount > 0) {
+        await conn.query(
+          'UPDATE suppliers SET due_balance = due_balance + ? WHERE id = ? AND shop_id = ?',
+          [po.due_amount, po.supplier_id, shopId]
+        );
+      }
 
       for (const item of items) {
         const { product_id, quantity_received, cost_price, selling_price } = item;
@@ -417,7 +467,7 @@ router.delete('/purchase-orders/:id', authorize(['shop_admin']), async (req, res
     await conn.beginTransaction();
 
     const [existing] = await conn.query(
-      'SELECT status FROM purchase_orders WHERE id = ? AND shop_id = ?',
+      'SELECT status, supplier_id, payment_basis, due_amount FROM purchase_orders WHERE id = ? AND shop_id = ?',
       [poId, shopId]
     );
 
@@ -426,7 +476,8 @@ router.delete('/purchase-orders/:id', authorize(['shop_admin']), async (req, res
       return res.status(404).json({ error: 'Purchase Order not found.' });
     }
 
-    const poStatus = existing[0].status;
+    const po = existing[0];
+    const poStatus = po.status;
 
     // If PO is received, revert product stock counts
     if (poStatus === 'received') {
@@ -443,6 +494,14 @@ router.delete('/purchase-orders/:id', authorize(['shop_admin']), async (req, res
           );
         }
       }
+    }
+
+    // Revert supplier due_balance if it was ordered/received and has due_amount
+    if ((poStatus === 'ordered' || poStatus === 'received') && po.payment_basis === 'credit' && po.due_amount > 0) {
+      await conn.query(
+        'UPDATE suppliers SET due_balance = GREATEST(due_balance - ?, 0) WHERE id = ? AND shop_id = ?',
+        [po.due_amount, po.supplier_id, shopId]
+      );
     }
 
     await conn.query('DELETE FROM purchase_orders WHERE id = ? AND shop_id = ?', [poId, shopId]);
@@ -638,6 +697,8 @@ router.put('/:id', authorize(['shop_admin']), async (req, res) => {
 
 /**
  * @route   DELETE /api/suppliers/:id
+/**
+ * @route   DELETE /api/suppliers/:id
  * @desc    Delete a supplier
  */
 router.delete('/:id', authorize(['shop_admin']), async (req, res) => {
@@ -659,6 +720,78 @@ router.delete('/:id', authorize(['shop_admin']), async (req, res) => {
   } catch (error) {
     console.error('Delete supplier error:', error);
     res.status(500).json({ error: 'Server error deleting supplier.' });
+  }
+});
+
+/**
+ * @route   PUT /api/suppliers/purchase-orders/:id/pay
+ * @desc    Record a payment towards a credit purchase order due balance
+ */
+router.put('/purchase-orders/:id/pay', authorize(['shop_admin']), async (req, res) => {
+  const shopId = req.shopId;
+  const poId = req.params.id;
+  const { payment_amount } = req.body;
+  const amount = parseFloat(payment_amount || 0);
+
+  if (amount <= 0) {
+    return res.status(400).json({ error: 'Payment amount must be greater than zero.' });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [pos] = await conn.query(
+      'SELECT * FROM purchase_orders WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [poId, shopId]
+    );
+
+    if (pos.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Purchase Order not found.' });
+    }
+
+    const po = pos[0];
+    if (po.payment_basis !== 'credit') {
+      await conn.rollback();
+      return res.status(400).json({ error: 'This Purchase Order is not on a credit basis.' });
+    }
+
+    const due = parseFloat(po.due_amount);
+    if (due <= 0) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'This Purchase Order has already been fully paid.' });
+    }
+
+    if (amount > due) {
+      await conn.rollback();
+      return res.status(400).json({ error: `Payment amount (${amount}) exceeds outstanding due (${due}).` });
+    }
+
+    const newDue = due - amount;
+    const newPaid = parseFloat(po.paid_amount) + amount;
+
+    await conn.query(
+      'UPDATE purchase_orders SET paid_amount = ?, due_amount = ? WHERE id = ? AND shop_id = ?',
+      [newPaid, newDue, poId, shopId]
+    );
+
+    // If the PO is already ordered or received, decrement the supplier's due balance
+    if (po.status === 'ordered' || po.status === 'received') {
+      await conn.query(
+        'UPDATE suppliers SET due_balance = GREATEST(due_balance - ?, 0) WHERE id = ? AND shop_id = ?',
+        [amount, po.supplier_id, shopId]
+      );
+    }
+
+    await conn.commit();
+    res.json({ message: 'Payment recorded successfully.', new_due: newDue, new_paid: newPaid });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Record PO payment error:', error);
+    res.status(500).json({ error: 'Server error recording payment.' });
+  } finally {
+    conn.release();
   }
 });
 

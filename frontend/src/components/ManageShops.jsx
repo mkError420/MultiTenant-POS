@@ -349,7 +349,7 @@ export default function ManageShops() {
         </div>
         <button
           onClick={() => { setAddForm(emptyAdd); setShowAddModal(true); }}
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5"
+          className="inline-flex items-center gap-2 bg-slate-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl text-sm shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -554,7 +554,7 @@ export default function ManageShops() {
                 Manage Users & Passwords
               </button>
               <button onClick={() => openEdit(detailShop)}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 rounded-xl transition-colors">
+                className="w-full flex items-center justify-center gap-2 bg-slate-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 rounded-xl transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
@@ -598,7 +598,7 @@ export default function ManageShops() {
               <div className="px-6 py-5 space-y-5">
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">1</span>
+                    <span className="w-6 h-6 rounded-full bg-slate-600 text-white text-xs font-bold flex items-center justify-center shrink-0">1</span>
                     <h4 className="text-sm font-bold text-slate-700">Shop Profile</h4>
                   </div>
                   <div className="space-y-3 pl-8">
@@ -620,7 +620,7 @@ export default function ManageShops() {
                 </div>
                 <div className="pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">2</span>
+                    <span className="w-6 h-6 rounded-full bg-slate-600 text-white text-xs font-bold flex items-center justify-center shrink-0">2</span>
                     <h4 className="text-sm font-bold text-slate-700">Shop Administrator Account</h4>
                   </div>
                   <div className="space-y-3 pl-8">
@@ -641,7 +641,7 @@ export default function ManageShops() {
             </form>
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
               <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors">Cancel</button>
-              <button onClick={handleAddSubmit} disabled={submitting} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition-colors shadow flex items-center gap-2">
+              <button onClick={handleAddSubmit} disabled={submitting} className="px-5 py-2 bg-slate-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition-colors shadow flex items-center gap-2">
                 {submitting && <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" />}
                 Register Shop & Admin
               </button>
@@ -684,7 +684,7 @@ export default function ManageShops() {
               </div>
               <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors">Cancel</button>
-                <button type="submit" disabled={submitting} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition-colors shadow flex items-center gap-2">
+                <button type="submit" disabled={submitting} className="px-5 py-2 bg-slate-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition-colors shadow flex items-center gap-2">
                   {submitting && <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" />}
                   Save Changes
                 </button>

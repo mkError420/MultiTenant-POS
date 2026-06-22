@@ -26,6 +26,41 @@ router.get('/', async (req, res) => {
       [shopId]
     );
 
+    // Fetch product details for all items in held bills to provide detailed UI info
+    for (let bill of heldBills) {
+      let itemsList = [];
+      try {
+        itemsList = typeof bill.items === 'string' ? JSON.parse(bill.items) : bill.items;
+      } catch (e) {
+        itemsList = [];
+      }
+
+      if (itemsList && itemsList.length > 0) {
+        const productIds = itemsList.map(item => item.product_id);
+        const [products] = await db.query(
+          'SELECT id, name, sku, price FROM products WHERE id IN (?) AND shop_id = ?',
+          [productIds, shopId]
+        );
+        
+        const productMap = {};
+        products.forEach(p => {
+          productMap[p.id] = p;
+        });
+
+        bill.items = itemsList.map(item => {
+          const prod = productMap[item.product_id] || {};
+          return {
+            ...item,
+            name: prod.name || 'Unknown Product',
+            sku: prod.sku || 'N/A',
+            price: parseFloat(prod.price || 0)
+          };
+        });
+      } else {
+        bill.items = [];
+      }
+    }
+
     res.json(heldBills);
   } catch (error) {
     console.error('Fetch held bills error:', error);

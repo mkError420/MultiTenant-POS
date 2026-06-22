@@ -595,9 +595,9 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
                             {/* Resume button */}
                             <button
                               onClick={() => onResume(bill)}
-                              disabled={bill.status !== 'held'}
-                              className="bg-indigo-600 disabled:bg-slate-150 disabled:text-slate-400 text-white font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors shadow-sm inline-flex items-center space-x-1"
-                              title="Resume checkout cart or due payment"
+                              disabled={bill.status !== 'held' || itemsList.length === 0}
+                              className="bg-slate-600 disabled:bg-slate-150 disabled:text-slate-400 text-white font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors shadow-sm inline-flex items-center space-x-1"
+                              title={itemsList.length === 0 ? "Cannot resume a due payment tracker" : "Resume checkout cart"}
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.2" />
@@ -632,11 +632,15 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
                                   ) : (
                                     <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
                                       {itemsList.map((item, idx) => (
-                                        <div key={idx} className="flex justify-between items-center px-3 py-2 text-xs">
+                                        <div key={idx} className="flex justify-between items-center px-4 py-2.5 text-xs">
                                           <div>
-                                            <span className="font-medium text-slate-700">Product #{item.product_id}</span>
+                                            <div className="font-semibold text-slate-700">{item.name}</div>
+                                            <div className="text-[10px] text-slate-400 mt-0.5">SKU: {item.sku} | Price: ৳{parseFloat(item.price || 0).toFixed(2)}</div>
                                           </div>
-                                          <span className="font-bold text-slate-600">×{item.quantity}</span>
+                                          <div className="text-right">
+                                            <span className="font-bold text-slate-500">×{item.quantity}</span>
+                                            <span className="font-extrabold text-slate-800 ml-3">৳{((item.price || 0) * item.quantity).toFixed(2)}</span>
+                                          </div>
                                         </div>
                                       ))}
                                     </div>
@@ -724,7 +728,7 @@ export default function HeldBills({ onResume = () => {}, onHeldBillsChange = () 
                 onClick={() => setCurrentPage(page)}
                 className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
                   currentPage === page
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-slate-600 text-white shadow-xs'
                     : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
                 }`}
               >

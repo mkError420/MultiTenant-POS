@@ -15,7 +15,6 @@ import HeldBills from './components/HeldBills';
 import OtherCost from './components/OtherCost';
 import TotalRevenue from './components/TotalRevenue';
 import Wastage from './components/Wastage';
-import BalanceSheet from './components/BalanceSheet';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -189,7 +188,6 @@ export default function App() {
         case '/wastage':   return <Wastage />;
         case '/other-cost': return <OtherCost />;
         case '/total-revenue': return <TotalRevenue />;
-        case '/balance-sheet': return <BalanceSheet />;
         case '/settings':  return <Settings />;
         default:           return <Dashboard />;
       }
@@ -230,7 +228,6 @@ export default function App() {
       case '/sales':     return <SalesHistory />;
       case '/other-cost': return <OtherCost />;
       case '/total-revenue': return <TotalRevenue />;
-      case '/balance-sheet': return <BalanceSheet />;
       case '/wastage': return <Wastage />;
       case '/staff':     return <ManageStaff />;
       case '/settings':  return <Settings />;
@@ -243,7 +240,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-xl shadow-indigo-600/40 animate-pulse">
+          <div className="w-12 h-12 rounded-2xl bg-slate-600 flex items-center justify-center shadow-xl shadow-indigo-600/40 animate-pulse">
             <span className="text-white font-bold text-sm">POS</span>
           </div>
           <p className="text-slate-500 text-sm">Loading...</p>

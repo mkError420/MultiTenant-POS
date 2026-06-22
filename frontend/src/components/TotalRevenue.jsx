@@ -104,12 +104,15 @@ export default function TotalRevenue() {
  
     const headers = ['Financial Indicator', 'Category', 'Description', 'Amount (৳)'];
     const rows = [
-      ['Sales Revenue', 'Inflow', 'Gross revenue generated from customer sales transactions', revenueData.sales_revenue.toFixed(2)],
+      ['Sales Revenue (Accrual)', 'Inflow', 'Gross revenue generated from customer sales transactions', revenueData.sales_revenue.toFixed(2)],
+      ['Sales Revenue (Cash Collected)', 'Inflow', 'Actual cash collected from sales transactions', revenueData.sales_cash_received.toFixed(2)],
       ['Cost of Goods Sold (COGS)', 'Outflow', 'Cost price value of stock sold to customers', revenueData.cost_of_goods_sold.toFixed(2)],
-      ['Product Purchasing Cost', 'Outflow', 'Cash outflow for received purchase orders', revenueData.inventory_purchasing_cost.toFixed(2)],
+      ['Product Purchasing Cost (Accrual)', 'Outflow', 'Total value of ordered and received purchase orders', revenueData.inventory_purchasing_cost.toFixed(2)],
+      ['Product Purchasing Cost (Cash Paid)', 'Outflow', 'Actual cash paid out for purchase orders', revenueData.inventory_purchasing_cash_paid.toFixed(2)],
+      ['Supplier Credit (Owed)', 'Outflow', 'Total outstanding payable balance owed to suppliers', (revenueData.supplier_due || 0).toFixed(2)],
       ['Other Costs', 'Outflow', 'Shop operational costs and miscellaneous overheads', revenueData.other_costs.toFixed(2)],
       ['Wastage & Damage Loss', 'Outflow', 'Cost of damaged, expired, or stolen items written off', (revenueData.wastage_loss || 0).toFixed(2)],
-      ['Net Profit (Cashflow Basis)', 'Summary', 'Net cashflow liquid profit (Sales - Purchasing Cost - Other Costs - Wastage Loss)', revenueData.net_profit_cashflow.toFixed(2)],
+      ['Net Profit (Cashflow Basis)', 'Summary', 'Net cashflow liquid profit (Cash Collected - Cash Paid - Other Costs - Wastage Loss)', revenueData.net_profit_cashflow.toFixed(2)],
       ['Net Profit (COGS Margin Basis)', 'Summary', 'Net trading margins profit (Sales - COGS - Other Costs - Wastage Loss)', revenueData.net_profit_cogs.toFixed(2)]
     ];
  
@@ -263,6 +266,7 @@ export default function TotalRevenue() {
               </div>
               <div className="mt-4">
                 <span className="block text-2xl font-black text-slate-800">{formatCurrency(revenueData.sales_revenue)}</span>
+                <span className="text-xs font-bold text-emerald-600 mt-1 block">Cash Collected: {formatCurrency(revenueData.sales_cash_received)}</span>
                 <span className="text-xs text-slate-450 mt-1 block">From {revenueData.sales_count} sales transactions</span>
               </div>
             </div>
@@ -279,7 +283,9 @@ export default function TotalRevenue() {
               </div>
               <div className="mt-4">
                 <span className="block text-2xl font-black text-slate-800">{formatCurrency(revenueData.inventory_purchasing_cost)}</span>
-                <span className="text-xs text-slate-450 mt-1 block">Cash outflow on received POs</span>
+                <span className="text-xs font-bold text-rose-600 mt-1 block">Cash Paid: {formatCurrency(revenueData.inventory_purchasing_cash_paid)}</span>
+                <span className="text-xs font-bold text-amber-600 mt-1 block">Credit (Owed): {formatCurrency(revenueData.supplier_due)}</span>
+                <span className="text-xs text-slate-450 mt-1 block">Value of active purchase orders</span>
               </div>
             </div>
 
@@ -557,12 +563,12 @@ export default function TotalRevenue() {
 
                 <div className="space-y-3.5 mt-5">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">Gross Sales Revenue:</span>
-                    <span className="font-bold text-slate-800">{formatCurrency(revenueData.sales_revenue)}</span>
+                    <span className="text-slate-500">Cash Collected (Sales):</span>
+                    <span className="font-bold text-emerald-600">{formatCurrency(revenueData.sales_cash_received)}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">Product Buying Cost (POs):</span>
-                    <span className="font-bold text-rose-600">-{formatCurrency(revenueData.inventory_purchasing_cost)}</span>
+                    <span className="text-slate-500">Cash Paid (POs):</span>
+                    <span className="font-bold text-rose-600">-{formatCurrency(revenueData.inventory_purchasing_cash_paid)}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-500">Other Operational Costs:</span>

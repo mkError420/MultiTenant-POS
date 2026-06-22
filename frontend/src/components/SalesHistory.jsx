@@ -517,7 +517,7 @@ export default function SalesHistory() {
                 onClick={() => setCurrentPage(page)}
                 className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
                   currentPage === page
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-slate-600 text-white shadow-xs'
                     : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
                 }`}
               >
@@ -819,7 +819,7 @@ export default function SalesHistory() {
                         <div className="mt-8 space-y-2">
                           <button
                             onClick={() => handlePrint(previewMode)}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center justify-center space-x-2"
+                            className="w-full bg-slate-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center justify-center space-x-2"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
