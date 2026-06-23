@@ -73,9 +73,15 @@ export default function Suppliers() {
   const [receiveItems, setReceiveItems] = useState([]); // Array of { product_id, quantity_received, cost_price, product_name, sku }
   const [receiveNotes, setReceiveNotes] = useState('');
 
-  // PO Filter
+  // PO Filter (global PO list tab)
   const [poFilterStatus, setPoFilterStatus] = useState('all');
   const [poPaymentAmount, setPoPaymentAmount] = useState('');
+
+  // Supplier Profile — PO history filters
+  const [profilePoFilter, setProfilePoFilter] = useState('all');   // 'all' | 'paid' | 'due'
+  const [profilePoDateFrom, setProfilePoDateFrom] = useState('');
+  const [profilePoDateTo, setProfilePoDateTo] = useState('');
+  const [profilePoMonth, setProfilePoMonth] = useState('');         // 'YYYY-MM' format
 
   // Load baseline directory data
   const fetchSuppliers = async () => {
@@ -156,6 +162,11 @@ export default function Suppliers() {
   useEffect(() => {
     if (selectedSupplierId) {
       loadProfileData(selectedSupplierId);
+      // Reset profile-level filters on supplier switch
+      setProfilePoFilter('all');
+      setProfilePoDateFrom('');
+      setProfilePoDateTo('');
+      setProfilePoMonth('');
     } else {
       setProfileData(null);
     }
@@ -772,6 +783,34 @@ export default function Suppliers() {
   // PROFILE RENDER
   if (selectedSupplierId && profileData) {
     const { supplier, stats, purchaseOrders: sPOs, costLogs: sLogs } = profileData;
+
+    // Apply profile-level PO filters
+    const filteredProfilePOs = sPOs.filter(po => {
+      // Payment status filter
+      if (profilePoFilter === 'paid' && parseFloat(po.due_amount || 0) > 0) return false;
+      if (profilePoFilter === 'due'  && parseFloat(po.due_amount || 0) <= 0) return false;
+
+      // Date range filter
+      const poDate = new Date(po.order_date);
+      if (profilePoDateFrom) {
+        const from = new Date(profilePoDateFrom);
+        from.setHours(0, 0, 0, 0);
+        if (poDate < from) return false;
+      }
+      if (profilePoDateTo) {
+        const to = new Date(profilePoDateTo);
+        to.setHours(23, 59, 59, 999);
+        if (poDate > to) return false;
+      }
+
+      // Month filter (overrides date range if set)
+      if (profilePoMonth) {
+        const [yr, mo] = profilePoMonth.split('-').map(Number);
+        if (poDate.getFullYear() !== yr || poDate.getMonth() + 1 !== mo) return false;
+      }
+
+      return true;
+    });
     
     // Unique list of products this supplier has supplied or historically adjusted
     const uniqueProducts = Array.from(new Set(sLogs.map(l => l.product_id)))
@@ -967,14 +1006,77 @@ export default function Suppliers() {
           <div className="p-6">
             {profileTab === 'pos_history' && (
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h4 className="font-bold text-slate-700 text-sm">POs placed with {supplier.name}</h4>
-                  <button
-                    onClick={() => openAddPo(supplier.id)}
-                    className="bg-slate-600 hover:bg-indigo-700 text-white font-semibold py-1.5 px-4 rounded-lg text-xs shadow-sm transition-colors"
-                  >
-                    + Add Purchase Order
-                  </button>
+                {/* Filter bar */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payment Status:</span>
+                      {['all', 'paid', 'due'].map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setProfilePoFilter(f)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
+                            profilePoFilter === f
+                              ? f === 'paid'
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                : f === 'due'
+                                  ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                                  : 'bg-slate-700 text-white border-slate-700 shadow-sm'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+                          }`}
+                        >
+                          {f === 'all' ? 'All POs' : f === 'paid' ? '✓ Fully Paid' : '⚠ Has Due'}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => openAddPo(supplier.id)}
+                      className="bg-slate-600 hover:bg-indigo-700 text-white font-semibold py-1.5 px-4 rounded-lg text-xs shadow-sm transition-colors"
+                    >
+                      + Add Purchase Order
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date Range:</span>
+                      <input
+                        type="date"
+                        value={profilePoDateFrom}
+                        onChange={e => { setProfilePoDateFrom(e.target.value); setProfilePoMonth(''); }}
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-slate-700"
+                        placeholder="From"
+                      />
+                      <span className="text-slate-400 text-xs font-semibold">→</span>
+                      <input
+                        type="date"
+                        value={profilePoDateTo}
+                        onChange={e => { setProfilePoDateTo(e.target.value); setProfilePoMonth(''); }}
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-slate-700"
+                        placeholder="To"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Month:</span>
+                      <input
+                        type="month"
+                        value={profilePoMonth}
+                        onChange={e => { setProfilePoMonth(e.target.value); setProfilePoDateFrom(''); setProfilePoDateTo(''); }}
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-slate-700"
+                      />
+                    </div>
+                    {(profilePoFilter !== 'all' || profilePoDateFrom || profilePoDateTo || profilePoMonth) && (
+                      <button
+                        onClick={() => { setProfilePoFilter('all'); setProfilePoDateFrom(''); setProfilePoDateTo(''); setProfilePoMonth(''); }}
+                        className="text-xs font-semibold text-rose-500 hover:text-rose-700 underline transition-colors"
+                      >
+                        Clear Filters
+                      </button>
+                    )}
+                    <span className="ml-auto text-[10px] font-bold text-slate-400">
+                      Showing <span className="text-slate-700">{filteredProfilePOs.length}</span> of <span className="text-slate-700">{sPOs.length}</span> POs
+                    </span>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto border border-slate-100 rounded-xl">
@@ -992,12 +1094,14 @@ export default function Suppliers() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {sPOs.length === 0 ? (
+                      {filteredProfilePOs.length === 0 ? (
                         <tr>
-                          <td colSpan="8" className="p-8 text-center text-slate-400">No POs recorded.</td>
+                          <td colSpan="8" className="p-8 text-center text-slate-400">
+                            {sPOs.length === 0 ? 'No POs recorded.' : 'No POs match the selected filters.'}
+                          </td>
                         </tr>
                       ) : (
-                        sPOs.map(po => (
+                        filteredProfilePOs.map(po => (
                           <tr key={po.id} className="hover:bg-slate-50/50">
                             <td className="p-3 font-mono font-bold text-slate-700">#PO-{po.id}</td>
                             <td className="p-3 text-slate-600">{formatDate(po.order_date).split(',')[0]}</td>
