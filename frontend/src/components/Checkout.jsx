@@ -868,18 +868,21 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
                       <thead>
                         <tr className="border-b border-dashed border-slate-300 font-bold text-slate-700">
                           <th className="pb-1 text-left">Item</th>
-                          <th className="pb-1 text-center w-12">Qty</th>
+                          <th className="pb-1 text-center w-8">Qty</th>
+                          <th className="pb-1 text-center w-8">Unit</th>
+                          <th className="pb-1 text-right w-16">Price</th>
                           <th className="pb-1 text-right w-20">Total</th>
                         </tr>
                       </thead>
                       <tbody>
                         {receipt.items.map((item, idx) => (
                           <tr key={idx} className="border-b border-dotted border-slate-100">
-                            <td className="py-2 pr-2 text-slate-800 break-words max-w-[140px]">
+                            <td className="py-2 pr-1 text-slate-800 break-words max-w-[100px]">
                               <div>{item.name || item.product_name}</div>
-                              <div className="text-[9px] text-slate-400">@ ৳{parseFloat(item.price || item.unit_price).toFixed(2)}</div>
                             </td>
                             <td className="py-2 text-center text-slate-600">{item.quantity}</td>
+                            <td className="py-2 text-center text-slate-500">{item.unit || 'pcs'}</td>
+                            <td className="py-2 text-right text-slate-600">৳{parseFloat(item.price || item.unit_price).toFixed(2)}</td>
                             <td className="py-2 text-right font-semibold text-slate-800">
                               ৳{((item.price || item.unit_price) * item.quantity).toFixed(2)}
                             </td>
@@ -1144,18 +1147,21 @@ export default function Checkout({ onHeldBillsChange = () => {}, resumedHeldBill
               <thead>
                 <tr style={{ borderBottom: '1px dashed #000' }}>
                   <th style={{ textAlign: 'left', paddingBottom: '3px' }}>Item</th>
-                  <th style={{ textAlign: 'center', paddingBottom: '3px', width: '30px' }}>Qty</th>
+                  <th style={{ textAlign: 'center', paddingBottom: '3px', width: '25px' }}>Qty</th>
+                  <th style={{ textAlign: 'center', paddingBottom: '3px', width: '25px' }}>Unit</th>
+                  <th style={{ textAlign: 'right', paddingBottom: '3px', width: '55px' }}>Price</th>
                   <th style={{ textAlign: 'right', paddingBottom: '3px', width: '60px' }}>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {receipt.items.map((item, idx) => (
                   <tr key={idx}>
-                    <td style={{ paddingTop: '3px', maxWidth: '140px', wordBreak: 'break-all' }}>
+                    <td style={{ paddingTop: '3px', maxWidth: '100px', wordBreak: 'break-all' }}>
                       {item.name || item.product_name}
-                      <span style={{ display: 'block', fontSize: '8px', color: '#666' }}>@ ৳{parseFloat(item.price || item.unit_price).toFixed(2)}</span>
                     </td>
                     <td style={{ textAlign: 'center', paddingTop: '3px' }}>{item.quantity}</td>
+                    <td style={{ textAlign: 'center', paddingTop: '3px', color: '#666' }}>{item.unit || 'pcs'}</td>
+                    <td style={{ textAlign: 'right', paddingTop: '3px' }}>৳{parseFloat(item.price || item.unit_price).toFixed(2)}</td>
                     <td style={{ textAlign: 'right', paddingTop: '3px' }}>৳{((item.price || item.unit_price) * item.quantity).toFixed(2)}</td>
                   </tr>
                 ))}

@@ -26,6 +26,10 @@ export default function SalesHistory() {
   const isAdmin = user.role === 'shop_admin';
   const [selectedSaleIds, setSelectedSaleIds] = useState([]);
 
+  // Profit breakdown modal state
+  const [profitModal, setProfitModal] = useState(null); // { sale, details } | null
+  const [profitLoading, setProfitLoading] = useState(false);
+
   const handlePrint = (mode) => {
     document.body.classList.add(`print-mode-${mode}`);
     window.print();
@@ -108,6 +112,25 @@ export default function SalesHistory() {
   const openReceipt = (sale) => {
     setSelectedSale(sale);
     fetchSaleDetails(sale.id);
+  };
+
+  const openProfitModal = async (sale) => {
+    setProfitModal({ sale, details: null });
+    setProfitLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/sales/${sale.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to load profit details.');
+      const data = await response.json();
+      setProfitModal({ sale, details: data });
+    } catch (err) {
+      triggerAlert('error', err.message);
+      setProfitModal(null);
+    } finally {
+      setProfitLoading(false);
+    }
   };
 
   const handleDeleteSale = async (saleId) => {
@@ -645,6 +668,18 @@ export default function SalesHistory() {
                         >
                           View
                         </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => openProfitModal(sale)}
+                            className="text-emerald-600 hover:text-emerald-900 font-semibold text-xs border border-emerald-100 hover:bg-emerald-50 px-2.5 py-1 rounded-lg transition-colors flex items-center space-x-1"
+                            title="View profit breakdown (Admin Only)"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                            <span>Details</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteSale(sale.id)}
                           className="text-rose-500 hover:text-rose-800 border border-rose-100 hover:bg-rose-50 p-1 rounded-lg transition-colors"
@@ -703,6 +738,158 @@ export default function SalesHistory() {
           </div>
         </div>
       )}
+      {/* --- PROFIT BREAKDOWN MODAL (ADMIN ONLY) --- */}
+      {profitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-white font-extrabold text-base tracking-tight">Profit Breakdown</h2>
+                  <p className="text-emerald-100 text-xs mt-0.5">Sale #{profitModal.sale.id} · {new Date(profitModal.sale.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setProfitModal(null)}
+                className="text-white/70 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-lg"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              {profitLoading ? (
+                <div className="py-16 flex flex-col items-center justify-center space-y-3">
+                  <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-emerald-600"></div>
+                  <p className="text-sm text-slate-400 font-medium">Loading profit data...</p>
+                </div>
+              ) : profitModal.details ? (() => {
+                const items = profitModal.details.items || [];
+                const totalCost    = items.reduce((s, i) => s + parseFloat(i.cost_price || 0) * i.quantity, 0);
+                const totalRevenue = items.reduce((s, i) => s + parseFloat(i.unit_price || 0) * i.quantity, 0);
+                const totalProfit  = totalRevenue - totalCost;
+                const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0.0';
+
+                return (
+                  <>
+                    {/* Per-product Table */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 mb-5">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                            <th className="px-4 py-3">Product</th>
+                            <th className="px-4 py-3 text-center w-12">Qty</th>
+                            <th className="px-4 py-3 text-right">Cost Price</th>
+                            <th className="px-4 py-3 text-right">Selling Price</th>
+                            <th className="px-4 py-3 text-right">Profit</th>
+                            <th className="px-4 py-3 text-center w-20">Margin</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {items.map((item, idx) => {
+                            const costPerUnit  = parseFloat(item.cost_price || 0);
+                            const sellPerUnit  = parseFloat(item.unit_price || 0);
+                            const qty          = item.quantity;
+                            const totalCostRow = costPerUnit * qty;
+                            const totalSellRow = sellPerUnit * qty;
+                            const profitRow    = totalSellRow - totalCostRow;
+                            const marginRow    = totalSellRow > 0 ? ((profitRow / totalSellRow) * 100).toFixed(1) : '0.0';
+                            const isLoss       = profitRow < 0;
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="px-4 py-3">
+                                  <div className="font-semibold text-slate-800">{item.product_name || item.name}</div>
+                                  <div className="text-xs text-slate-400 font-mono mt-0.5">{item.product_sku || 'N/A'}</div>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="font-bold text-slate-700">{qty}</span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="text-slate-600 font-medium">৳{totalCostRow.toFixed(2)}</div>
+                                  <div className="text-xs text-slate-400">৳{costPerUnit.toFixed(2)}/unit</div>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="text-slate-800 font-semibold">৳{totalSellRow.toFixed(2)}</div>
+                                  <div className="text-xs text-slate-400">৳{sellPerUnit.toFixed(2)}/unit</div>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className={`font-extrabold ${isLoss ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    {isLoss ? '-' : '+'}৳{Math.abs(profitRow).toFixed(2)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                    isLoss
+                                      ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                                      : parseFloat(marginRow) >= 20
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                        : 'bg-amber-50 text-amber-700 border border-amber-100'
+                                  }`}>
+                                    {isLoss ? '' : ''}{marginRow}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Summary Totals */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Cost Price</p>
+                        <p className="text-xl font-extrabold text-slate-700">৳{totalCost.toFixed(2)}</p>
+                        <p className="text-xs text-slate-400 mt-1">What you paid</p>
+                      </div>
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
+                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Total Selling Price</p>
+                        <p className="text-xl font-extrabold text-indigo-700">৳{totalRevenue.toFixed(2)}</p>
+                        <p className="text-xs text-indigo-400 mt-1">What customer paid</p>
+                      </div>
+                      <div className={`border rounded-xl p-4 text-center ${totalProfit >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          Total Profit
+                        </p>
+                        <p className={`text-xl font-extrabold ${totalProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {totalProfit >= 0 ? '+' : '-'}৳{Math.abs(totalProfit).toFixed(2)}
+                        </p>
+                        <p className={`text-xs mt-1 font-semibold ${totalProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {profitMargin}% margin
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="mt-5 flex justify-end">
+                      <button
+                        onClick={() => setProfitModal(null)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-6 rounded-xl text-sm transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                );
+              })() : (
+                <div className="py-16 text-center text-slate-400 text-sm">No data available.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- DETAILED RECEIPT VIEWER MODAL --- */}
       {selectedSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
@@ -777,18 +964,21 @@ export default function SalesHistory() {
                                 <thead>
                                   <tr className="border-b border-dashed border-slate-300 font-bold text-slate-700">
                                     <th className="pb-1 text-left">Item</th>
-                                    <th className="pb-1 text-center w-12">Qty</th>
+                                    <th className="pb-1 text-center w-8">Qty</th>
+                                    <th className="pb-1 text-center w-8">Unit</th>
+                                    <th className="pb-1 text-right w-16">Price</th>
                                     <th className="pb-1 text-right w-20">Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {receipt.items.map((item, idx) => (
                                     <tr key={idx} className="border-b border-dotted border-slate-100">
-                                      <td className="py-2 pr-2 text-slate-800 break-words max-w-[140px]">
+                                      <td className="py-2 pr-1 text-slate-800 break-words max-w-[90px]">
                                         <div>{item.product_name || item.name}</div>
-                                        <div className="text-[9px] text-slate-400">@ ৳{parseFloat(item.unit_price || item.price).toFixed(2)}</div>
                                       </td>
                                       <td className="py-2 text-center text-slate-600">{item.quantity}</td>
+                                      <td className="py-2 text-center text-slate-500">{item.unit || 'pcs'}</td>
+                                      <td className="py-2 text-right text-slate-600">৳{parseFloat(item.unit_price || item.price).toFixed(2)}</td>
                                       <td className="py-2 text-right font-semibold text-slate-800">
                                         ৳{((item.unit_price || item.price) * item.quantity).toFixed(2)}
                                       </td>
@@ -1043,18 +1233,21 @@ export default function SalesHistory() {
                               <thead>
                                 <tr style={{ borderBottom: '1px dashed #000' }}>
                                   <th style={{ textAlign: 'left', paddingBottom: '3px' }}>Item</th>
-                                  <th style={{ textAlign: 'center', paddingBottom: '3px', width: '30px' }}>Qty</th>
+                                  <th style={{ textAlign: 'center', paddingBottom: '3px', width: '25px' }}>Qty</th>
+                                  <th style={{ textAlign: 'center', paddingBottom: '3px', width: '25px' }}>Unit</th>
+                                  <th style={{ textAlign: 'right', paddingBottom: '3px', width: '55px' }}>Price</th>
                                   <th style={{ textAlign: 'right', paddingBottom: '3px', width: '60px' }}>Total</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {receipt.items.map((item, idx) => (
                                   <tr key={idx}>
-                                    <td style={{ paddingTop: '3px', maxWidth: '140px', wordBreak: 'break-all' }}>
+                                    <td style={{ paddingTop: '3px', maxWidth: '90px', wordBreak: 'break-all' }}>
                                       {item.product_name || item.name}
-                                      <span style={{ display: 'block', fontSize: '8px', color: '#666' }}>@ ৳{parseFloat(item.unit_price || item.price).toFixed(2)}</span>
                                     </td>
                                     <td style={{ textAlign: 'center', paddingTop: '3px' }}>{item.quantity}</td>
+                                    <td style={{ textAlign: 'center', paddingTop: '3px', color: '#666' }}>{item.unit || 'pcs'}</td>
+                                    <td style={{ textAlign: 'right', paddingTop: '3px' }}>৳{parseFloat(item.unit_price || item.price).toFixed(2)}</td>
                                     <td style={{ textAlign: 'right', paddingTop: '3px' }}>৳{((item.unit_price || item.price) * item.quantity).toFixed(2)}</td>
                                   </tr>
                                 ))}

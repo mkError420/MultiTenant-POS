@@ -246,9 +246,9 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Sale record not found or access denied.' });
     }
 
-    // Retrieve sale items
+    // Retrieve sale items (includes cost_price for profit calculation)
     const [items] = await db.query(
-      `SELECT si.*, p.name as product_name, p.sku as product_sku 
+      `SELECT si.*, p.name as product_name, p.sku as product_sku, p.cost_price 
        FROM sale_items si
        JOIN products p ON si.product_id = p.id
        WHERE si.sale_id = ? AND si.shop_id = ?`,
