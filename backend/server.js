@@ -31,6 +31,7 @@ const heldBillRoutes = require('./routes/held-bills');
 const otherCostRoutes = require('./routes/other-costs');
 const wastageRoutes = require('./routes/wastage');
 const returnRoutes = require('./routes/returns');
+const manualOrderRoutes = require('./routes/manual-orders');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -45,6 +46,7 @@ app.use('/api/held-bills', heldBillRoutes);
 app.use('/api/other-costs', otherCostRoutes);
 app.use('/api/wastages', wastageRoutes);
 app.use('/api/returns', returnRoutes);
+app.use('/api/manual-orders', manualOrderRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

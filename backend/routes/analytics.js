@@ -212,6 +212,46 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
 
     const trend = Object.values(trendMap);
 
+    // 10. Calculate Manual Sales Order Metrics
+    let manualOrdersQuery = `
+      SELECT 
+        COUNT(CASE WHEN mo.status = 'pending' THEN 1 END) AS pending_count,
+        COUNT(CASE WHEN mo.status = 'confirmed' THEN 1 END) AS confirmed_count,
+        COALESCE(SUM(CASE WHEN mo.status = 'confirmed' THEN s.final_amount END), 0) AS confirmed_value,
+        COALESCE(SUM(CASE WHEN mo.status = 'confirmed' THEN s.paid_amount END), 0) AS confirmed_paid,
+        COALESCE(SUM(CASE WHEN mo.status = 'confirmed' THEN s.due_amount END), 0) AS confirmed_due
+      FROM manual_orders mo
+      LEFT JOIN sales s ON mo.sale_id = s.id
+      WHERE ` + (hasShop ? 'mo.shop_id = ?' : '1=1');
+    const manualParams = hasShop ? [shopId] : [];
+    if (start_date && end_date) {
+      manualOrdersQuery += ' AND mo.created_at BETWEEN ? AND ?';
+      manualParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+    }
+    const [manualRows] = await db.query(manualOrdersQuery, manualParams);
+    
+    // Calculate value of pending drafts
+    let pendingValueQuery = `
+      SELECT COALESCE(SUM(moi.subtotal), 0) as pending_value
+      FROM manual_order_items moi
+      JOIN manual_orders mo ON moi.order_id = mo.id
+      WHERE mo.status = 'pending' AND ` + (hasShop ? 'mo.shop_id = ?' : '1=1');
+    const pendingParams = hasShop ? [shopId] : [];
+    if (start_date && end_date) {
+      pendingValueQuery += ' AND mo.created_at BETWEEN ? AND ?';
+      pendingParams.push(`${start_date} 00:00:00`, `${end_date} 23:59:59`);
+    }
+    const [pendingValueRows] = await db.query(pendingValueQuery, pendingParams);
+
+    const manualMetrics = {
+      pending_count: parseInt(manualRows[0].pending_count || 0),
+      confirmed_count: parseInt(manualRows[0].confirmed_count || 0),
+      confirmed_value: parseFloat(manualRows[0].confirmed_value || 0),
+      confirmed_paid: parseFloat(manualRows[0].confirmed_paid || 0),
+      confirmed_due: parseFloat(manualRows[0].confirmed_due || 0),
+      pending_value: parseFloat(pendingValueRows[0].pending_value || 0)
+    };
+
     res.json({
       sales_revenue: totalSales,
       sales_cash_received: totalSalesCash,
@@ -226,7 +266,8 @@ router.get('/revenue', authorize(['super_admin', 'shop_admin']), async (req, res
       wastage_loss: totalWastage,
       net_profit_cogs: netProfitCOGS,
       net_profit_cashflow: netProfitCashflow,
-      trend: trend
+      trend: trend,
+      manual_orders: manualMetrics
     });
   } catch (error) {
     console.error('Revenue breakdown error:', error);

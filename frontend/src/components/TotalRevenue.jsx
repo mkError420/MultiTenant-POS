@@ -114,6 +114,8 @@ export default function TotalRevenue() {
       ['Supplier Credit (Owed)', 'Outflow', 'Total outstanding payable balance owed to suppliers', (revenueData.supplier_due || 0).toFixed(2)],
       ['Other Costs', 'Outflow', 'Shop operational costs and miscellaneous overheads', revenueData.other_costs.toFixed(2)],
       ['Wastage & Damage Loss', 'Outflow', 'Cost of damaged, expired, or stolen items written off', (revenueData.wastage_loss || 0).toFixed(2)],
+      ['Manual Sales Orders (Confirmed)', 'Inflow', 'Confirmed sales from manually collected salesman orders', (revenueData.manual_orders?.confirmed_value || 0).toFixed(2)],
+      ['Manual Sales Orders (Pending Drafts)', 'Pending', 'Value of salesman order drafts currently in pending status', (revenueData.manual_orders?.pending_value || 0).toFixed(2)],
       ['Net Profit (Cashflow Basis)', 'Summary', 'Net cashflow liquid profit (Cash Collected - Cash Paid - Other Costs - Wastage Loss - Customer Returns)', revenueData.net_profit_cashflow.toFixed(2)],
       ['Net Profit (COGS Margin Basis)', 'Summary', 'Net trading margins profit (Sales - COGS - Other Costs - Wastage Loss - Customer Returns)', revenueData.net_profit_cogs.toFixed(2)]
     ];
@@ -378,11 +380,11 @@ export default function TotalRevenue() {
 
                 <div className="space-y-3.5 mt-5">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">Gross Sales Revenue:</span>
+                    <span className="text-slate-500">Sales Revenue:</span>
                     <span className="font-bold text-slate-800">{formatCurrency(revenueData.sales_revenue)}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">Cost of Goods Sold (COGS):</span>
+                    <span className="text-slate-500">Total Sold (TS):</span>
                     <span className="font-bold text-rose-600">-{formatCurrency(revenueData.cost_of_goods_sold)}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
@@ -981,6 +983,64 @@ export default function TotalRevenue() {
             );
           })()}
 
+          {/* Manual Sales Orders Analytics Section */}
+          {revenueData.manual_orders && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="border-b border-slate-100 pb-3 flex justify-between items-center bg-slate-50/50 -mx-6 -mt-6 p-6 rounded-t-2xl">
+                <div>
+                  <h3 className="font-bold text-slate-800 flex items-center space-x-2 text-base">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0"></span>
+                    <span>Manual Sales Orders Overview</span>
+                  </h3>
+                  <p className="text-xs text-slate-450 mt-0.5">Performance tracking of manually collected salesman orders and standalone ledger balances</p>
+                </div>
+                <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-100">
+                  {revenueData.manual_orders.confirmed_count + revenueData.manual_orders.pending_count} Total Orders
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pt-2">
+                {/* Pending Drafts */}
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Salesman Drafts (Pending)</span>
+                    <span className="text-xl font-extrabold text-slate-800 mt-2 block">{revenueData.manual_orders.pending_count} Carts</span>
+                  </div>
+                  <span className="text-xs font-semibold text-slate-500 mt-2 block">Value: {formatCurrency(revenueData.manual_orders.pending_value)}</span>
+                </div>
+
+                {/* Confirmed Orders Revenue */}
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Confirmed Sales (Accrual)</span>
+                    <span className="text-xl font-extrabold text-emerald-600 mt-2 block">{formatCurrency(revenueData.manual_orders.confirmed_value)}</span>
+                  </div>
+                  <span className="text-xs text-slate-455 mt-2 block">From {revenueData.manual_orders.confirmed_count} completed orders</span>
+                </div>
+
+                {/* Cash Collected */}
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cash Received (Collected)</span>
+                    <span className="text-xl font-extrabold text-emerald-700 mt-2 block">{formatCurrency(revenueData.manual_orders.confirmed_paid)}</span>
+                  </div>
+                  <span className="text-xs text-slate-455 mt-2 block">Liquid cash collected to date</span>
+                </div>
+
+                {/* Outstanding Credit Receivables */}
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Outstanding Due (Receivables)</span>
+                    <span className={`text-xl font-extrabold mt-2 block ${revenueData.manual_orders.confirmed_due > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                      {formatCurrency(revenueData.manual_orders.confirmed_due)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-455 mt-2 block">Unpaid salesman accounts balance</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Ledger Table Container */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
             <div className="p-5 border-b border-slate-100">
@@ -1071,6 +1131,20 @@ export default function TotalRevenue() {
                     <td className="p-4 text-slate-500">Recorded refund value of items returned by customers</td>
                     <td className="p-4 text-right pr-6 font-bold text-rose-600">-{formatCurrency(revenueData.customer_returns || 0)}</td>
                   </tr>
+
+                  {/* Row 4.7: Manual Sales Orders */}
+                  {revenueData.manual_orders && (
+                    <tr className="hover:bg-slate-50/50 transition-colors">
+                      <td className="p-4 pl-6 font-bold text-slate-800">Manual Sales Orders (Invoiced)</td>
+                      <td className="p-4">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          Inflow (*)
+                        </span>
+                      </td>
+                      <td className="p-4 text-slate-500">Confirmed salesman orders (gross revenue value is already consolidated under Sales Revenue)</td>
+                      <td className="p-4 text-right pr-6 font-bold text-slate-700">{formatCurrency(revenueData.manual_orders.confirmed_value)}</td>
+                    </tr>
+                  )}
 
                   {/* Row 5: Net Profit Cashflow */}
                   <tr className="bg-slate-50/40 hover:bg-slate-50 transition-colors border-t border-slate-150">

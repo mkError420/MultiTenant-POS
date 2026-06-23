@@ -138,6 +138,61 @@ const pool = mysql.createPool({
     `);
     console.log("Migration: Verified and created 'due_payments' table.");
     
+    // Create manual_orders table if not exists
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`manual_orders\` (
+        \`id\` INT AUTO_INCREMENT,
+        \`shop_id\` INT NOT NULL,
+        \`salesman_name\` VARCHAR(255) NOT NULL,
+        \`customer_id\` INT NULL,
+        \`customer_name\` VARCHAR(255) NULL,
+        \`customer_phone\` VARCHAR(50) NULL,
+        \`customer_address\` TEXT NULL,
+        \`payment_method\` ENUM('cash', 'credit') NOT NULL DEFAULT 'cash',
+        \`discount\` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        \`tax\` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        \`notes\` TEXT NULL,
+        \`status\` ENUM('pending', 'confirmed', 'cancelled') NOT NULL DEFAULT 'pending',
+        \`sale_id\` INT NULL,
+        \`created_by\` INT NOT NULL,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        \`updated_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        CONSTRAINT \`fk_manual_orders_shop\` FOREIGN KEY (\`shop_id\`) REFERENCES \`shops\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_manual_orders_customer\` FOREIGN KEY (\`customer_id\`) REFERENCES \`customers\` (\`id\`) ON DELETE SET NULL,
+        CONSTRAINT \`fk_manual_orders_sale\` FOREIGN KEY (\`sale_id\`) REFERENCES \`sales\` (\`id\`) ON DELETE SET NULL,
+        CONSTRAINT \`fk_manual_orders_user\` FOREIGN KEY (\`created_by\`) REFERENCES \`users\` (\`id\`) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    console.log("Migration: Verified and created 'manual_orders' table.");
+
+    // Check if customer_name column exists on manual_orders table (for systems where it was created in a previous step)
+    const [moNameCol] = await connection.query("SHOW COLUMNS FROM \`manual_orders\` LIKE 'customer_name'");
+    if (moNameCol.length === 0) {
+      await connection.query("ALTER TABLE \`manual_orders\` ADD COLUMN \`customer_name\` VARCHAR(255) NULL");
+      await connection.query("ALTER TABLE \`manual_orders\` ADD COLUMN \`customer_phone\` VARCHAR(50) NULL");
+      await connection.query("ALTER TABLE \`manual_orders\` ADD COLUMN \`customer_address\` TEXT NULL");
+      console.log("Migration: Added manual customer details columns to 'manual_orders' table.");
+    }
+
+    // Create manual_order_items table if not exists
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`manual_order_items\` (
+        \`id\` INT AUTO_INCREMENT,
+        \`order_id\` INT NOT NULL,
+        \`shop_id\` INT NOT NULL,
+        \`product_id\` INT NOT NULL,
+        \`quantity\` INT NOT NULL,
+        \`unit_price\` DECIMAL(10,2) NOT NULL,
+        \`subtotal\` DECIMAL(10,2) NOT NULL,
+        PRIMARY KEY (\`id\`),
+        CONSTRAINT \`fk_manual_order_items_order\` FOREIGN KEY (\`order_id\`) REFERENCES \`manual_orders\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_manual_order_items_shop\` FOREIGN KEY (\`shop_id\`) REFERENCES \`shops\` (\`id\`) ON DELETE CASCADE,
+        CONSTRAINT \`fk_manual_order_items_product\` FOREIGN KEY (\`product_id\`) REFERENCES \`products\` (\`id\`) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    console.log("Migration: Verified and created 'manual_order_items' table.");
+
     connection.release();
   } catch (error) {
     console.error('Database connection or migration failed:', error.message);

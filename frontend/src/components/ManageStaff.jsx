@@ -6,6 +6,7 @@ const SECTION_OPTIONS = [
   { label: 'POS Checkout', path: '/checkout' },
   { label: 'Held Bills', path: '/held-bills' },
   { label: 'Sales History', path: '/sales' },
+  { label: 'Manual Orders Entry', path: '/manual-orders' },
   { label: 'Inventory Catalog', path: '/products' },
   { label: 'Wastage Logs', path: '/wastage' },
   { label: 'Suppliers Directory', path: '/suppliers' },

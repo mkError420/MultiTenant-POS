@@ -16,6 +16,7 @@ import OtherCost from './components/OtherCost';
 import TotalRevenue from './components/TotalRevenue';
 import Wastage from './components/Wastage';
 import Returns from './components/Returns';
+import ManualOrders from './components/ManualOrders';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -256,6 +257,7 @@ export default function App() {
       case '/suppliers': return <Suppliers />;
       case '/customers': return <Customers />;
       case '/sales':     return <SalesHistory />;
+      case '/manual-orders': return <ManualOrders />;
       case '/other-cost': return <OtherCost />;
       case '/total-revenue': return <TotalRevenue />;
       case '/wastage': return <Wastage />;
