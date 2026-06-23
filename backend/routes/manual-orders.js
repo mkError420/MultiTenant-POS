@@ -19,7 +19,9 @@ router.get('/', async (req, res) => {
       `SELECT mo.*, u.name as created_by_name, 
               COALESCE(c.name, mo.customer_name) as customer_name,
               COALESCE(c.phone, mo.customer_phone) as customer_phone,
-              s.due_amount as current_sale_due
+              s.due_amount as current_sale_due,
+              s.final_amount as sale_final_amount,
+              s.paid_amount as sale_paid_amount
        FROM manual_orders mo
        LEFT JOIN users u ON mo.created_by = u.id
        LEFT JOIN customers c ON mo.customer_id = c.id
@@ -49,7 +51,9 @@ router.get('/:id', async (req, res) => {
               COALESCE(c.name, mo.customer_name) as customer_name,
               COALESCE(c.phone, mo.customer_phone) as customer_phone,
               COALESCE(c.address, mo.customer_address) as customer_address,
-              s.due_amount as current_sale_due
+              s.due_amount as current_sale_due,
+              s.final_amount as sale_final_amount,
+              s.paid_amount as sale_paid_amount
        FROM manual_orders mo
        LEFT JOIN users u ON mo.created_by = u.id
        LEFT JOIN customers c ON mo.customer_id = c.id
@@ -432,7 +436,7 @@ router.post('/:id/confirm', authorize(['shop_admin', 'shop_staff']), async (req,
 router.post('/sales/:saleId/pay-due', authorize(['shop_admin', 'shop_staff']), async (req, res) => {
   const saleId = req.params.saleId;
   const shopId = req.shopId;
-  const { payment_amount, payment_method = 'cash' } = req.body;
+  const { payment_amount, payment_method = 'cash', transaction_reference, note } = req.body;
 
   const parsedAmount = parseFloat(payment_amount);
   if (!parsedAmount || parsedAmount <= 0) {
@@ -484,9 +488,9 @@ router.post('/sales/:saleId/pay-due', authorize(['shop_admin', 'shop_staff']), a
 
     // 4. Record due payment in due_payments
     await connection.query(
-      `INSERT INTO due_payments (shop_id, customer_id, sale_id, amount, payment_method)
-       VALUES (?, ?, ?, ?, ?)`,
-      [shopId, sale.customer_id || null, saleId, actualPayment, payment_method]
+      `INSERT INTO due_payments (shop_id, customer_id, sale_id, amount, payment_method, transaction_reference, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [shopId, sale.customer_id || null, saleId, actualPayment, payment_method, transaction_reference || null, note || null]
     );
 
     await connection.commit();

@@ -137,6 +137,14 @@ const pool = mysql.createPool({
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
     console.log("Migration: Verified and created 'due_payments' table.");
+
+    // Check if transaction_reference column exists on due_payments table
+    const [duePayColumns] = await connection.query("SHOW COLUMNS FROM `due_payments` LIKE 'transaction_reference'");
+    if (duePayColumns.length === 0) {
+      await connection.query("ALTER TABLE `due_payments` ADD COLUMN `transaction_reference` VARCHAR(255) NULL");
+      await connection.query("ALTER TABLE `due_payments` ADD COLUMN `note` TEXT NULL");
+      console.log("Migration: Added 'transaction_reference' and 'note' columns to 'due_payments' table.");
+    }
     
     // Create manual_orders table if not exists
     await connection.query(`
